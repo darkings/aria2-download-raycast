@@ -2,109 +2,104 @@
 
 Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwift 推送）共用同一个 aria2 RPC 与任务队列。
 
-> Status: scaffold. 代码尚未落地；本 README 先固定目标、架构和一期范围。
+- **Extension**：TypeScript / React，Windows-only，Raycast 2.x。
+- **Engine**：PowerShell 5.1，自包含 aria2 初始化、配置、启停、完成通知。
+- **状态**：基础实现可用；engine 离线测试 45/45 通过；extension 通过 typecheck / lint / build；已完成本机直链下载与 RPC 实测。
 
-## Goals
+## 功能
 
-- **直链**：HTTP / HTTPS / FTP，支持目录、重命名、16 连接、headers、校验和。
-- **种子**：`.torrent` 文件（FilePicker / Finder 选中），多文件列表。
-- **磁力 / BT**：`magnet:` 链接、DHT / PEX / LPD、端口、加密、做种策略。
-- **网盘**：LinkSwift 油猴脚本把直链和 Cookie / Referer / UA 推送到同一个 RPC。
-- **统一体验**：Tasks 看板、Chunk 进度图、aria2 配置、完成/错误 Toast。
-- **Windows 优先**：Raycast 2.x（Windows），Node.js >= 22.22.2；不依赖 macOS。
+- **直链**：HTTP / HTTPS / FTP；目录、重命名、16 连接、headers、校验和。
+- **种子**：`.torrent` 文件选择器或 Explorer 选中文件；多文件任务。
+- **磁力 / BT**：`magnet:` 链接；DHT / PEX / LPD、端口、加密、做种策略。
+- **网盘**：LinkSwift 油猴脚本把直链与 Cookie / Referer / UA 推送到同一个 RPC。
+- **统一体验**：Tasks 看板、Chunk 热力图、aria2 配置、完成/错误 Toast。
+- **按需启停**：不做开机自启；Raycast 的 Start / Stop 命令显式管理 daemon。
 
-## Architecture
+## 快速开始
 
-```text
-Raycast extension (TypeScript / React)
-  ├─ Tasks / Task Detail       进度、Chunk 图、暂停/删除
-  ├─ Add Download             URL / magnet / 剪贴板
-  ├─ Add Torrent              .torrent / Finder
-  ├─ Configuration            aria2 HTTP + BT 参数
-  └─ Start / Stop             按需启停
-        │ JSON-RPC 127.0.0.1:6800
-        ▼
-aria2c RPC daemon (PowerShell engine, hidden)
-  ├─ HTTP/HTTPS/FTP
-  ├─ .torrent / magnet / BT
-  └─ LinkSwift netdisk direct links (headers forwarded)
-        ▼
-C:\Users\Jie\Downloads + session/log
+### 1. 初始化 engine（一次）
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\engine\Initialize-Aria2.ps1 -NoToast
 ```
 
-一个 RPC、一个任务队列、一套 Chunk 图和完成通知；LinkSwift 只负责网盘取链与 headers。
+它会：
 
-## Planned layout
+- 下载官方 aria2 1.37.0 win64 ZIP，校验 SHA-256；
+- 安装到 `%LOCALAPPDATA%\lat3ncy-toolbox\aria2\bin\1.37.0\aria2c.exe`；
+- 生成 `settings.json` / `rpc-secret.txt` / `aria2.runtime.conf`；
+- 不启动 daemon。
+
+### 2. 启动 Raycast 扩展
+
+```powershell
+cd extension
+npm install
+npm run dev       # Raycast dev extension；或 npm run build 后导入
+```
+
+### 3. Raycast 命令
+
+| 命令 | 作用 |
+| --- | --- |
+| **Aria2 Tasks** | 统一任务列表；进度、速度、ETA、暂停/删除/打开目录 |
+| **Add Download** | URL / magnet / 剪贴板；目录、连接数、headers |
+| **Add Torrent** | `.torrent` 文件或 Explorer 选中文件 |
+| **Aria2 Configuration** | aria2 HTTP + BT + RPC + 通知设置 |
+| **Start Aria2 / Stop Aria2** | 显式启停；Stop 默认只在空闲时执行 |
+
+### 4. LinkSwift
+
+在 LinkSwift 的 Aria2/RPC 设置中填写：
+
+- domain：`http://127.0.0.1`
+- port：`6800`（或 Configuration 里的 RPC 端口）
+- path：`/jsonrpc`
+- token：`rpc-secret.txt` 里的原始 secret（**不要加 `token:`**）
+- dir：留空
+
+网盘直链的 Cookie / Referer / User-Agent 由 LinkSwift 传入；**不要把网盘直链手动粘到 Add Download**，它大概率 403/412。
+
+## Chunk 视图
+
+Raycast 不提供 Raycast 窗口尺寸 API，因此这里采用**固定版式**，不测量窗口：
+
+- **SVG Heatmap（默认）**：48×12 圆角方块，按分片完成度从灰→黄→绿渐变；写入 `environment.supportPath`，通过 `Detail` markdown 展示；窗口变宽时图片整体缩放，不重排列数。
+- **Native Mosaic（fallback）**：Raycast `Grid` 8 列色块，不依赖运行时图片；在扩展偏好 **Chunk View** 切换。
+- **限制**：`bitfield` 表示分片完成度，不是每条连接当前下载偏移；磁力元数据阶段没有 `bitfield`；超大分片数会回退字节进度。
+
+## Engine
 
 ```text
 engine/
-  aria2.conf
-  Initialize-Aria2.ps1       # 下载官方 1.37.0 + SHA-256，生成 secret/settings
-  Start-Aria2Rpc.ps1
-  Stop-Aria2Rpc.ps1
-  Get-Aria2Settings.ps1
-  Set-Aria2Settings.ps1
+  aria2.conf                 # 运行时 conf 模板（占位符）
+  Aria2Common.ps1            # 设置/校验/runtime conf/RPC/日志/Toast
+  Initialize-Aria2.ps1       # 下载、校验、安装、初始化配置
+  Start-Aria2Rpc.ps1         # 隐藏启动 + RPC 就绪校验
+  Stop-Aria2Rpc.ps1          # 空闲检查 + 优雅/强制停止
+  Get-Aria2Settings.ps1      # -Json 输出 settings
+  Set-Aria2Settings.ps1      # 校验、原子写、重建 runtime conf
   Notify-Aria2.ps1           # hook -> Windows Toast
-  Aria2Hook.vbs
-  tests/
-extension/
-  package.json
-  src/tasks.tsx
-  src/task-detail.tsx
-  src/add-download.tsx
-  src/add-torrent.tsx
-  src/configuration.tsx
-  src/start.ts
-  src/stop.ts
-  src/lib/aria2.ts
-  src/lib/bitfield.ts
-  src/lib/torrent.ts
-  src/lib/netdisk.ts
-  src/lib/task-type.ts
-  src/lib/engine-settings.ts
-  src/lib/format.ts
-  scripts/sync-engine.js
+  Aria2Hook.vbs              # 无窗口 hook shim
+  tests/Aria2Common.Tests.ps1
 ```
 
-## Planned commands
+运行时状态：
 
-| Command | Mode | Description |
-| --- | --- | --- |
-| Tasks | view | Unified list: HTTP / BT / Magnet / Netdisk, speed, ETA, progress |
-| Task Detail | view | Chunk grid, files, pause/resume/remove/open folder |
-| Add Download | view | URL / magnet / clipboard, advanced headers, netdisk guard |
-| Add Torrent | view | `.torrent` file picker or Finder selection |
-| Configuration | view | aria2 HTTP + BT settings, validation, restart |
-| Start aria2 | no-view | Hidden start + RPC check |
-| Stop aria2 | no-view | Idle-only stop with confirmation |
+```text
+%LOCALAPPDATA%\lat3ncy-toolbox\aria2\
+  install.json
+  settings.json
+  rpc-secret.txt
+  aria2.runtime.conf
+  session.txt
+  aria2.log
+  rpc.log
+```
 
-## Chunk map: adaptive to the Raycast window
+`settings.json` 是 aria2 配置的权威来源；`Configuration` 命令写它，`Start` 命令生成 runtime conf。RPC 只监听 loopback，`rpc-listen-all=false`。
 
-Raycast does not expose the Raycast window dimensions to extensions (`environment` only exposes appearance / text size; `MenuBarExtra` is macOS-only; `Grid.columns` is capped at 8). A fixed markdown grid cannot truly reflow.
-
-Planned approach:
-
-1. **Window watcher** (Windows helper): a long-lived PowerShell helper uses Win32 `GetForegroundWindow` / `GetClientRect` (P/Invoke) to report the Raycast client size as JSON lines on change. No admin rights.
-2. **Grid sizing**: `columns = clamp(floor((clientWidth - padding) / cellWidth), 16, 64)`, `rows = clamp(floor((clientHeight - header) / cellHeight), 6, 20)`; `cellWidth/cellHeight` depend on `environment.textSize`.
-3. **Aggregation**: `aria2.tellStatus` returns `bitfield` (hex; highest bit = piece 0), `numPieces`, `pieceLength`; aggregate pieces into `columns × rows` cells without expanding the full bit array. Cell states: `🟩` complete, `🟨` partial, `⬜` missing.
-4. **Rendering**: `Detail` markdown grid with hard line breaks; poll bitfield every 1s while Detail is open; regenerate only when bitfield or window size changes.
-5. **Fallback**: if the native watcher fails, use a `chunkColumns` preference (default 40×12) and `environment.textSize`; never block the task detail on window measurement.
-6. **Limits**: `numPieces > 200k` → 2s polling; `> 2M` → byte-progress fallback. The map reflects piece completion, not per-connection offsets.
-
-## aria2 configuration
-
-`Configuration` edits aria2 engine settings, not Raycast UI preferences:
-
-- **Download**: dir, split, max-connection-per-server, min-split-size, max-concurrent-downloads, file-allocation, disk-cache.
-- **Limits**: max-overall-download-limit, max-overall-upload-limit.
-- **Network**: proxy mode (system/direct/custom), all-proxy, no-proxy, check-certificate (default on), timeouts/retries.
-- **RPC**: rpc-port; rpc-secret controlled; `rpc-listen-all=false`, `rpc-allow-origin-all=true` fixed.
-- **BT**: listen/dht ports, DHT/PEX/LPD, max peers, encryption, seed-time/ratio, upload limit, metadata save/load, tracker list.
-- **Session / notifications**: save-session-interval, hook on/off.
-
-Canonical config is `engine/settings.json`; `Start-Aria2Rpc.ps1` generates the runtime conf. Changes that require a restart show a “restart to apply” state; never auto-restart while downloads are active.
-
-## BT defaults
+### BT 默认值
 
 ```ini
 listen-port=6881
@@ -121,30 +116,56 @@ bt-load-saved-metadata=true
 rpc-save-upload-metadata=true
 ```
 
-- Seeding is disabled by default; enabling it is user opt-in.
-- BT needs inbound ports for best peer count; firewall/router forwarding is optional and never automatic.
-- Only download/share content you have the right to.
-- `rpc-listen-all` stays false; never expose the RPC port to LAN/Internet.
+- 默认不做种；需要私有 tracker 保种时在 Configuration 里提高 `seed-time`。
+- BT 下载过程中仍会上传；只下载/分享有权限的内容。
+- 无公网入站端口/NAT 时 peer 较少、速度受限；端口转发/防火墙需手动，engine 不自动提权。
 
-## Roadmap
+### 完成通知
 
-- [ ] P1 engine: init / start / stop / settings (HTTP + BT) / hooks
-- [ ] P2 tasks + adaptive chunk detail
-- [ ] P3 add download + add torrent
-- [ ] P4 aria2 configuration (HTTP + BT)
-- [ ] P5 LinkSwift netdisk verification, notifications, docs
-- [ ] P6 optional: torrent file selection, tracker update, magnet protocol handler, Store publish
+- HTTP / 直链 / 网盘：`on-download-complete` → `Notify-Aria2.ps1 -Event download`
+- BT：`on-bt-download-complete` → `Notify-Aria2.ps1 -Event bt`
+- 错误：`on-download-error`
+- 通知在扩展关闭后仍有效；扩展本身不做后台轮询。
 
-## Development
+## 开发与验证
 
-- Raycast for Windows 2.x; Node.js >= 22.22.2.
-- `extension/`: `npm install`, `npm run dev` (`ray develop`), `npm run build`.
-- `engine/`: PowerShell 5.1 scripts; offline unit tests must not download aria2 or hit the network.
-- No aria2 binary is committed; the engine downloads the official pinned ZIP and verifies SHA-256.
+```powershell
+# engine
+powershell -NoProfile -ExecutionPolicy Bypass -File engine\tests\Aria2Common.Tests.ps1
+
+# extension
+cd extension
+npm run typecheck
+npm run lint
+npm run build
+```
+
+扩展开发模式：
+
+```powershell
+cd extension
+npm run dev
+```
+
+## 结构
+
+```text
+engine/       PowerShell 引擎（安装/配置/启停/通知）
+extension/    Raycast 扩展（Tasks/Add/Configuration）
+docs/         Engine ⇄ Extension contract
+```
+
+## 已知限制
+
+- Windows 版 Raycast 不支持 MenuBarExtra；本扩展没有常驻 badge/后台通知，完成通知走 aria2 hook。
+- 扩展关闭后不会继续轮询任务；需要看进度时重新打开 Tasks。
+- Chunk 热力图是固定版式，不按窗口重排列数；窄窗会整体缩小。
+- 网盘 403/412 属于 LinkSwift 的 headers / 直链时效问题，不是 aria2 配置问题。
+- 本仓库不提交 aria2 二进制；由 `Initialize-Aria2.ps1` 从官方 GitHub 下载并校验。
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT。见 [LICENSE](LICENSE)。
 
 ## Related
 

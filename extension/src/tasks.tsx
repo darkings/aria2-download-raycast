@@ -1,0 +1,425 @@
+import {
+  Action,
+  ActionPanel,
+  Alert,
+  Color,
+  Icon,
+  List,
+  Toast,
+  confirmAlert,
+  getPreferenceValues,
+  open,
+  showToast,
+  useNavigation,
+  Keyboard,
+} from "@raycast/api";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import AddDownload from "./add-download";
+import AddTorrent from "./add-torrent";
+import Configuration from "./configuration";
+import TaskDetail from "./task-detail";
+import {
+  removeTask,
+  removeTaskResult,
+  pauseTask,
+  resumeTask,
+  getAllTasks,
+  ensureDaemon,
+} from "./lib/rpc";
+import { startDaemon, stopDaemon } from "./lib/engine";
+import { formatBytes, formatEta, formatSpeed } from "./lib/format";
+import {
+  getTaskError,
+  getTaskKind,
+  getTaskKindEmoji,
+  getTaskKindLabel,
+  getTaskName,
+  getTaskProgress,
+  getTaskStatusLabel,
+  getPrimaryUri,
+  isActiveTask,
+  isStoppedTask,
+  isWaitingTask,
+} from "./lib/task-type";
+import { Aria2Task, ExtensionPreferences } from "./lib/types";
+
+interface TaskSection {
+  title: string;
+  tasks: Aria2Task[];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function taskActions(
+  task: Aria2Task,
+  onRefresh: () => void,
+  onOpenDetail: () => void,
+  onStart: () => void,
+  onStop: () => void,
+): React.ReactNode {
+  const uri = getPrimaryUri(task);
+  const isActive = isActiveTask(task);
+  const isWaiting = isWaitingTask(task);
+  const isStopped = isStoppedTask(task);
+  const removeTitle = isStopped ? "Remove from List" : "Remove Download";
+
+  return (
+    <ActionPanel>
+      <Action title="Show Details" icon={Icon.Eye} onAction={onOpenDetail} />
+      {isActive && (
+        <Action
+          title="Pause"
+          icon={Icon.Pause}
+          shortcut={{ modifiers: ["ctrl"], key: "p" }}
+          onAction={async () => {
+            try {
+              await pauseTask(task.gid);
+              await showToast({ style: Toast.Style.Success, title: "Paused" });
+              onRefresh();
+            } catch (error) {
+              await showToast({
+                style: Toast.Style.Failure,
+                title: "Pause failed",
+                message: errorMessage(error),
+              });
+            }
+          }}
+        />
+      )}
+      {(isWaiting || task.status === "paused") && (
+        <Action
+          title="Resume"
+          icon={Icon.Play}
+          shortcut={Keyboard.Shortcut.Common.Refresh}
+          onAction={async () => {
+            try {
+              await resumeTask(task.gid);
+              await showToast({ style: Toast.Style.Success, title: "Resumed" });
+              onRefresh();
+            } catch (error) {
+              await showToast({
+                style: Toast.Style.Failure,
+                title: "Resume failed",
+                message: errorMessage(error),
+              });
+            }
+          }}
+        />
+      )}
+      <Action
+        title={removeTitle}
+        icon={Icon.Trash}
+        style={Action.Style.Destructive}
+        shortcut={{ modifiers: ["ctrl"], key: "x" }}
+        onAction={async () => {
+          const confirmed = await confirmAlert({
+            title: removeTitle,
+            message: `Remove "${getTaskName(task)}" from aria2?`,
+            primaryAction: {
+              title: removeTitle,
+              style: Alert.ActionStyle.Destructive,
+            },
+          });
+          if (!confirmed) return;
+          try {
+            if (isStopped) {
+              await removeTaskResult(task.gid);
+            } else {
+              await removeTask(task.gid);
+            }
+            await showToast({ style: Toast.Style.Success, title: "Removed" });
+            onRefresh();
+          } catch (error) {
+            await showToast({
+              style: Toast.Style.Failure,
+              title: "Remove failed",
+              message: errorMessage(error),
+            });
+          }
+        }}
+      />
+      {task.dir && (
+        <Action
+          title="Open Download Folder"
+          icon={Icon.Folder}
+          onAction={() => open(task.dir)}
+        />
+      )}
+      {uri && (
+        <Action.CopyToClipboard
+          title="Copy Source URL"
+          content={uri}
+          shortcut={{ modifiers: ["ctrl"], key: "c" }}
+        />
+      )}
+      <ActionPanel.Section title="aria2">
+        <Action title="Start Aria2" icon={Icon.Play} onAction={onStart} />
+        <Action title="Stop Aria2" icon={Icon.Stop} onAction={onStop} />
+        <Action
+          title="Refresh"
+          icon={Icon.ArrowClockwise}
+          onAction={onRefresh}
+        />
+      </ActionPanel.Section>
+      <ActionPanel.Section title="New">
+        <Action.Push
+          title="Add Download"
+          icon={Icon.Plus}
+          target={<AddDownload />}
+        />
+        <Action.Push
+          title="Add Torrent"
+          icon={Icon.Download}
+          target={<AddTorrent />}
+        />
+        <Action.Push
+          title="Aria2 Configuration"
+          icon={Icon.Gear}
+          target={<Configuration />}
+        />
+      </ActionPanel.Section>
+    </ActionPanel>
+  );
+}
+
+export default function Tasks() {
+  const { push } = useNavigation();
+  const preferences = getPreferenceValues<ExtensionPreferences>();
+  const [tasks, setTasks] = useState<Aria2Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [daemonError, setDaemonError] = useState<string | null>(null);
+  const errorToastShown = useRef(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const next = await getAllTasks();
+      setTasks(next);
+      setDaemonError(null);
+      errorToastShown.current = false;
+    } catch (error) {
+      setDaemonError(errorMessage(error));
+      if (!errorToastShown.current) {
+        errorToastShown.current = true;
+        await showToast({
+          style: Toast.Style.Failure,
+          title: "aria2 is not available",
+          message: errorMessage(error),
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const start = useCallback(async () => {
+    const toast = await showToast({
+      style: Toast.Style.Animated,
+      title: "Starting aria2…",
+    });
+    try {
+      await startDaemon();
+      toast.style = Toast.Style.Success;
+      toast.title = "aria2 is ready";
+      await refresh();
+    } catch (error) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Could not start aria2";
+      toast.message = errorMessage(error);
+    }
+  }, [refresh]);
+
+  const stop = useCallback(async () => {
+    try {
+      await stopDaemon({ onlyIfIdle: true });
+      await showToast({ style: Toast.Style.Success, title: "aria2 stopped" });
+      await refresh();
+    } catch (error) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Could not stop aria2",
+        message: errorMessage(error),
+      });
+    }
+  }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function boot() {
+      try {
+        await ensureDaemon();
+      } catch (error) {
+        if (!cancelled) setDaemonError(errorMessage(error));
+      }
+      if (!cancelled) await refresh();
+    }
+    boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    const seconds = Math.max(
+      1,
+      Number.parseInt(preferences.refreshInterval || "1", 10),
+    );
+    const timer = setInterval(() => {
+      void refresh();
+    }, seconds * 1000);
+    return () => clearInterval(timer);
+  }, [preferences.refreshInterval, refresh]);
+
+  const active = tasks.filter(isActiveTask);
+  const waiting = tasks.filter(isWaitingTask);
+  const stopped = tasks.filter(isStoppedTask);
+  const sections: TaskSection[] = [
+    { title: "Active", tasks: active },
+    { title: "Waiting", tasks: waiting },
+    ...(preferences.showStopped ? [{ title: "Stopped", tasks: stopped }] : []),
+  ].filter((section) => section.tasks.length > 0);
+
+  const emptyView = (
+    <List.EmptyView
+      icon={daemonError ? Icon.WifiDisabled : Icon.Download}
+      title={daemonError ? "aria2 RPC is not running" : "No downloads"}
+      description={
+        daemonError ?? "Add a URL, torrent or magnet link to start downloading."
+      }
+      actions={
+        <ActionPanel>
+          <Action title="Start Aria2" icon={Icon.Play} onAction={start} />
+          <Action.Push
+            title="Add Download"
+            icon={Icon.Plus}
+            target={<AddDownload />}
+          />
+          <Action.Push
+            title="Add Torrent"
+            icon={Icon.Download}
+            target={<AddTorrent />}
+          />
+          <Action
+            title="Refresh"
+            icon={Icon.ArrowClockwise}
+            onAction={refresh}
+          />
+        </ActionPanel>
+      }
+    />
+  );
+
+  return (
+    <List
+      isLoading={isLoading}
+      searchBarPlaceholder="Search downloads…"
+      actions={
+        <ActionPanel>
+          <Action
+            title="Refresh"
+            icon={Icon.ArrowClockwise}
+            onAction={refresh}
+          />
+          <Action title="Start Aria2" icon={Icon.Play} onAction={start} />
+          <Action title="Stop Aria2" icon={Icon.Stop} onAction={stop} />
+          <ActionPanel.Section title="New">
+            <Action.Push
+              title="Add Download"
+              icon={Icon.Plus}
+              target={<AddDownload />}
+            />
+            <Action.Push
+              title="Add Torrent"
+              icon={Icon.Download}
+              target={<AddTorrent />}
+            />
+            <Action.Push
+              title="Aria2 Configuration"
+              icon={Icon.Gear}
+              target={<Configuration />}
+            />
+          </ActionPanel.Section>
+        </ActionPanel>
+      }
+    >
+      {sections.length === 0 ? emptyView : undefined}
+      {sections.map((section) => (
+        <List.Section
+          key={section.title}
+          title={section.title}
+          subtitle={`${section.tasks.length}`}
+        >
+          {section.tasks.map((task) => {
+            const kind = getTaskKind(task);
+            const progress = getTaskProgress(task);
+            const isActive = isActiveTask(task);
+            const isWaiting = isWaitingTask(task);
+            const isComplete = task.status === "complete";
+            const isError = task.status === "error";
+            const subtitle = isActive
+              ? `${getTaskKindLabel(kind)} · ${formatSpeed(task.downloadSpeed)} · ${progress.toFixed(1)}% · ETA ${formatEta(
+                  task.totalLength,
+                  task.completedLength,
+                  task.downloadSpeed,
+                )}`
+              : isComplete
+                ? `${getTaskKindLabel(kind)} · ${formatBytes(task.totalLength)} · completed`
+                : isError
+                  ? `${getTaskKindLabel(kind)} · ${getTaskError(task)}`
+                  : `${getTaskKindLabel(kind)} · ${getTaskStatusLabel(task.status)} · ${progress.toFixed(1)}%`;
+
+            const accessories: List.Item.Accessory[] = [];
+            if (isActive) {
+              accessories.push({ text: `${progress.toFixed(1)}%` });
+              accessories.push({
+                tag: {
+                  value: formatSpeed(task.downloadSpeed),
+                  color: Color.Green,
+                },
+              });
+              accessories.push({
+                text: `ETA ${formatEta(task.totalLength, task.completedLength, task.downloadSpeed)}`,
+              });
+            } else if (isWaiting) {
+              accessories.push({ text: `${progress.toFixed(1)}%` });
+              accessories.push({
+                tag: {
+                  value: getTaskStatusLabel(task.status),
+                  color: Color.Orange,
+                },
+              });
+            } else if (isComplete) {
+              accessories.push({ text: formatBytes(task.totalLength) });
+              accessories.push({
+                tag: { value: "Completed", color: Color.Green },
+              });
+            } else if (isError) {
+              accessories.push({ tag: { value: "Failed", color: Color.Red } });
+              accessories.push({ text: getTaskError(task) });
+            }
+
+            return (
+              <List.Item
+                key={task.gid}
+                icon={getTaskKindEmoji(kind)}
+                title={getTaskName(task)}
+                subtitle={subtitle}
+                keywords={[kind, task.status, task.gid, getTaskKindLabel(kind)]}
+                accessories={accessories}
+                actions={taskActions(
+                  task,
+                  refresh,
+                  () => push(<TaskDetail gid={task.gid} />),
+                  start,
+                  stop,
+                )}
+              />
+            );
+          })}
+        </List.Section>
+      ))}
+    </List>
+  );
+}
