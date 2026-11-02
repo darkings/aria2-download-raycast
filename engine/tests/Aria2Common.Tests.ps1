@@ -169,6 +169,7 @@ try {
             'Get-Aria2Settings.ps1',
             'Set-Aria2Settings.ps1',
             'Notify-Aria2.ps1',
+            'Watch-Aria2.ps1',
             'Aria2Hook.vbs',
             'tests\Aria2Common.Tests.ps1'
         )
@@ -677,8 +678,7 @@ try {
             'summary-interval=0', 'enable-rpc=true', 'rpc-listen-all=false',
             'rpc-allow-origin-all=true', 'rpc-listen-port=', 'rpc-secret=',
             'check-certificate=', 'remote-time=true',
-            'content-disposition-default-utf8=true',
-            'on-download-complete=', 'on-bt-download-complete=', 'on-download-error='
+            'content-disposition-default-utf8=true'
         )
         foreach ($option in $requiredOptions) {
             Assert-Contains $text $option
@@ -715,10 +715,10 @@ try {
         Assert-Contains $text ('rpc-secret=' + $secret)
         Assert-Contains $text 'check-certificate=true'
         Assert-Contains $text 'bt-tracker=udp://tracker.example:80/announce'
-        Assert-Contains $text 'Aria2Hook.vbs'
-        Assert-Contains $text ' download'
-        Assert-Contains $text ' bt'
-        Assert-Contains $text ' error'
+        Assert-NotContains $text 'Aria2Hook.vbs'
+        Assert-NotContains $text 'on-download-complete='
+        Assert-NotContains $text 'on-bt-download-complete='
+        Assert-NotContains $text 'on-download-error='
         Assert-NotContains $text 'all-proxy='
         Assert-NotContains $text 'no-proxy='
         # Regenerate over the existing runtime conf (atomic replace path).
@@ -945,6 +945,12 @@ try {
             )
             Assert-Equal 0 $stop.ExitCode ('Stop dry run failed: ' + $stop.Output)
             Assert-Contains $stop.Output 'nothing to stop'
+
+            $watch = Invoke-ChildPowerShell -Arguments @(
+                '-File', (Join-Path $script:EngineRoot 'Watch-Aria2.ps1'), '-DryRun'
+            )
+            Assert-Equal 0 $watch.ExitCode ('Watch dry run failed: ' + $watch.Output)
+            Assert-Contains $watch.Output 'dry run'
         } finally {
             if ($hadValue) {
                 $env:LAT3NCY_ARIA2_HOME = $previous

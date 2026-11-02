@@ -5,7 +5,8 @@ import { pathToFileURL } from "node:url";
 import { environment } from "@raycast/api";
 
 import type { ChunkGrid } from "./bitfield";
-import { renderHeatmapSvg, type Appearance } from "./heatmap-svg";
+import { renderHeatmapPng } from "./heatmap-png";
+import type { Appearance } from "./heatmap-svg";
 
 export interface HeatmapFile {
   filePath: string;
@@ -20,18 +21,24 @@ export async function writeHeatmapFile(
 ): Promise<HeatmapFile> {
   const supportPath = environment.supportPath;
   await fs.mkdir(supportPath, { recursive: true });
-  const filePath = path.join(supportPath, `chunk-${gid}-${hash}.svg`);
-  await fs.writeFile(filePath, renderHeatmapSvg(grid, appearance), "utf8");
+  const filePath = path.join(supportPath, `chunk-${gid}-${hash}.png`);
+  await fs.writeFile(filePath, renderHeatmapPng(grid, appearance));
 
   try {
     const files = await fs.readdir(supportPath);
     const mine = files
       .filter(
-        (name) => name.startsWith(`chunk-${gid}-`) && name.endsWith(".svg"),
+        (name) => name.startsWith(`chunk-${gid}-`) && name.endsWith(".png"),
       )
       .sort()
       .reverse();
     for (const old of mine.slice(3)) {
+      await fs.rm(path.join(supportPath, old), { force: true });
+    }
+    const legacy = files.filter(
+      (name) => name.startsWith(`chunk-${gid}-`) && name.endsWith(".svg"),
+    );
+    for (const old of legacy) {
       await fs.rm(path.join(supportPath, old), { force: true });
     }
   } catch {
@@ -42,7 +49,7 @@ export async function writeHeatmapFile(
 }
 
 export function heatmapMarkdown(filePath: string): string {
-  return `![Chunk map](${pathToFileURL(filePath).href}?raycast-width=760)`;
+  return `![Chunk map](${pathToFileURL(filePath).href})`;
 }
 
 export function chunkLegend(): string {

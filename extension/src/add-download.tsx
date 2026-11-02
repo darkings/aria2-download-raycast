@@ -93,6 +93,21 @@ export default function AddDownload() {
   }, []);
 
   async function submit(values: FormValues) {
+    values = {
+      ...values,
+      urls: values.urls ?? urls,
+      directory: values.directory ?? directory,
+      out: values.out ?? out,
+      split: values.split ?? split,
+      userAgent: values.userAgent ?? userAgent,
+      referer: values.referer ?? referer,
+      cookie: values.cookie ?? cookie,
+      authorization: values.authorization ?? authorization,
+      proxy: values.proxy ?? proxy,
+      checksum: values.checksum ?? checksum,
+      pause: values.pause ?? pause,
+      navigate: values.navigate ?? navigate,
+    };
     const lines = values.urls
       .split(/\r?\n/)
       .map((line) => line.trim())

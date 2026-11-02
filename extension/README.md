@@ -25,7 +25,7 @@ npm run build
 
 ## Chunk view
 
-- **SVG Heatmap** (default): fixed 48×12 rounded-cell heatmap written to `environment.supportPath`; it scales as a whole with the Raycast window. It does not measure the window or reflow columns.
+- **PNG Heatmap** (default): fixed 48×12 rounded-cell heatmap encoded by Node `zlib` and written to `environment.supportPath`; it scales as a whole with the Raycast window. It does not measure the window or reflow columns.
 - **Native Mosaic**: Raycast `Grid` fallback, 8 columns of color blocks; no image dependency.
 - Switch with the **Chunk View** preference.
 

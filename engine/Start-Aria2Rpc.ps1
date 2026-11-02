@@ -66,6 +66,7 @@ try {
         Write-Output ('proxy mode: ' + [string]$settings['proxyMode'])
         Write-Output ('runtime conf: ' + $paths.RuntimeConfFile)
         Write-Output ('secret file: ' + $paths.SecretFile + ' (value never printed)')
+        Write-Output ('watcher: ' + $paths.WatchScript)
         exit $exitCodes.Success
     }
 
@@ -79,6 +80,7 @@ try {
     if (Test-Aria2RpcAvailable -Port $port -Secret $secret -TimeoutMs 1500) {
         Write-Output ('aria2 RPC is already running on http://127.0.0.1:' + $port + '/jsonrpc.')
         Write-Aria2EngineLog -Paths $paths -Message ('start: already running on port ' + $port) -Secret $secret
+        $null = Start-Aria2Watcher -Paths $paths
         exit $exitCodes.Success
     }
 
@@ -89,6 +91,7 @@ try {
         if (Wait-Aria2RpcReady -Port $port -Secret $secret -TimeoutSeconds 8) {
             Write-Output ('aria2 RPC is already running on http://127.0.0.1:' + $port + '/jsonrpc.')
             Write-Aria2EngineLog -Paths $paths -Message ('start: already running on port ' + $port) -Secret $secret
+            $null = Start-Aria2Watcher -Paths $paths
             exit $exitCodes.Success
         }
         throw (New-Aria2Error 'aria2c is running with this engine configuration but its RPC endpoint is not responding. Run Stop-Aria2Rpc.ps1 -Force, then try again.' $exitCodes.RpcFailure)
@@ -121,6 +124,7 @@ try {
 
     Write-Output ('aria2 RPC ready on http://127.0.0.1:' + $port + '/jsonrpc (pid ' + $process.Id + ').')
     Write-Aria2EngineLog -Paths $paths -Message ('start ok pid=' + $process.Id + ' port=' + $port) -Secret $secret
+    $null = Start-Aria2Watcher -Paths $paths
     $null = Show-Aria2ToastIfEnabled -NoToast:$NoToast -Title 'aria2 started' -Message ('RPC ready on 127.0.0.1:' + $port)
     exit $exitCodes.Success
 } catch {

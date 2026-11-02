@@ -141,6 +141,10 @@ try {
         $body = $body + ' - download complete'
         Write-Aria2EngineLog -Paths $paths -Message ('notify: download gid=' + $Gid + ' files=' + $NumFiles) -Secret $secret
         $null = Show-Aria2ToastIfEnabled -NoToast:$NoToast -Title 'Download complete' -Message $body
+        try {
+            $null = Set-Aria2Notified -Paths $paths -Gid $Gid -EventName 'download'
+        } catch {
+        }
         exit $exitCodes.Success
     }
 
@@ -157,6 +161,10 @@ try {
     }
     Write-Aria2EngineLog -Paths $paths -Message ('notify: error gid=' + $Gid) -Secret $secret
     $null = Show-Aria2ToastIfEnabled -NoToast:$NoToast -Title 'Download failed' -Message $body
+    try {
+        $null = Set-Aria2Notified -Paths $paths -Gid $Gid -EventName 'error'
+    } catch {
+    }
     exit $exitCodes.Success
 } catch {
     # Hook callbacks must never break a download; report to the engine log only.

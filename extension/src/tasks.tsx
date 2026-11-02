@@ -193,10 +193,16 @@ export default function Tasks() {
   const [daemonError, setDaemonError] = useState<string | null>(null);
   const errorToastShown = useRef(false);
 
+  const lastTasksJson = useRef("");
+
   const refresh = useCallback(async () => {
     try {
       const next = await getAllTasks();
-      setTasks(next);
+      const serialized = JSON.stringify(next);
+      if (serialized !== lastTasksJson.current) {
+        lastTasksJson.current = serialized;
+        setTasks(next);
+      }
       setDaemonError(null);
       errorToastShown.current = false;
     } catch (error) {

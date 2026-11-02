@@ -83,6 +83,12 @@ try {
         Write-Output ('aria2c processes: ' + $running.Count)
         Write-Output ('active downloads: ' + $activeCount)
         Write-Output ('waiting downloads: ' + $waitingCount)
+        $watcherId = Get-Aria2WatcherProcessId -Paths $paths
+        if ($watcherId -gt 0) {
+            Write-Output ('watcher pid: ' + $watcherId)
+        } else {
+            Write-Output 'watcher: not running'
+        }
         if ($rpcUp -and $busy -and -not $Force) {
             Write-Output 'decision: would refuse because downloads are active (exit 5 without -Force)'
         } elseif ($rpcUp -or $running.Count -gt 0) {
@@ -112,6 +118,8 @@ try {
         $null = Show-Aria2ToastIfEnabled -NoToast:$NoToast -Title 'aria2 is busy' -Message $busyDetail
         exit $exitCodes.Busy
     }
+
+    Stop-Aria2Watcher -Paths $paths
 
     if ($rpcUp) {
         if ($busy) {

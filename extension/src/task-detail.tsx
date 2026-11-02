@@ -15,7 +15,7 @@ import {
   useNavigation,
   Keyboard,
 } from "@raycast/api";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   MAX_RENDERABLE_PIECES,
@@ -91,11 +91,16 @@ function useTaskStatus(
   const [task, setTask] = useState<Aria2Task | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const lastTaskJson = useRef("");
 
   const refresh = useCallback(async () => {
     try {
       const next = await tellStatus(gid, STATUS_KEYS);
-      setTask(next);
+      const serialized = JSON.stringify(next);
+      if (serialized !== lastTaskJson.current) {
+        lastTaskJson.current = serialized;
+        setTask(next);
+      }
       setError(null);
     } catch (caught) {
       setError(messageOf(caught));
@@ -418,9 +423,11 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
     Math.min(64, Number.parseInt(preferences.chunkColumns || "48", 10)),
   );
   const numPieces = Number.parseInt(task?.numPieces ?? "0", 10);
-  const grid = task
-    ? aggregateBitfield(task.bitfield, numPieces, columns, 12)
-    : null;
+  const bitfield = task?.bitfield;
+  const grid = useMemo(
+    () => aggregateBitfield(bitfield, numPieces, columns, 12),
+    [bitfield, numPieces, columns],
+  );
 
   useEffect(() => {
     if (!task || preferences.chunkViz === "mosaic" || !grid) {

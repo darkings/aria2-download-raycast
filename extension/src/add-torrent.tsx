@@ -66,6 +66,7 @@ export default function AddTorrent() {
   }, []);
 
   async function submit(values: TorrentFormValues) {
+    values = { ...values, torrent, directory, pause, seed, navigate };
     const filePath = values.torrent[0];
     if (!filePath) {
       await showToast({

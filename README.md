@@ -4,7 +4,7 @@ Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwif
 
 - **Extension**：TypeScript / React，Windows-only，Raycast 2.x。
 - **Engine**：PowerShell 5.1，自包含 aria2 初始化、配置、启停、完成通知。
-- **状态**：基础实现可用；engine 离线测试 45/45 通过；extension 通过 typecheck / lint / build；已完成本机直链下载与 RPC 实测。
+- **状态**：可用；engine 离线测试 45/45 通过；extension 通过 typecheck / lint / build；已完成 Raycast UI 实测（Tasks、详情 PNG 热力图、Add Download、Add Torrent、Configuration、Start/Stop）及本机直链下载、torrent 添加、watcher 完成/错误通知实测。
 
 ## 功能
 
@@ -64,7 +64,7 @@ npm run dev       # Raycast dev extension；或 npm run build 后导入
 
 Raycast 不提供 Raycast 窗口尺寸 API，因此这里采用**固定版式**，不测量窗口：
 
-- **SVG Heatmap（默认）**：48×12 圆角方块，按分片完成度从灰→黄→绿渐变；写入 `environment.supportPath`，通过 `Detail` markdown 展示；窗口变宽时图片整体缩放，不重排列数。
+- **PNG Heatmap（默认）**：48×12 圆角方块，按分片完成度从灰→黄→绿渐变；由 Node `zlib` 直接编码 PNG 写入 `environment.supportPath`，通过 `Detail` markdown 本地图片展示；窗口变宽时图片整体缩放，不重排列数。
 - **Native Mosaic（fallback）**：Raycast `Grid` 8 列色块，不依赖运行时图片；在扩展偏好 **Chunk View** 切换。
 - **限制**：`bitfield` 表示分片完成度，不是每条连接当前下载偏移；磁力元数据阶段没有 `bitfield`；超大分片数会回退字节进度。
 
@@ -79,8 +79,9 @@ engine/
   Stop-Aria2Rpc.ps1          # 空闲检查 + 优雅/强制停止
   Get-Aria2Settings.ps1      # -Json 输出 settings
   Set-Aria2Settings.ps1      # 校验、原子写、重建 runtime conf
-  Notify-Aria2.ps1           # hook -> Windows Toast
-  Aria2Hook.vbs              # 无窗口 hook shim
+  Notify-Aria2.ps1           # 手动/兼容用的 Toast helper
+  Watch-Aria2.ps1            # 隐藏完成/错误 watcher（实际通知路径）
+  Aria2Hook.vbs              # 旧 hook shim（aria2 1.37 Windows 上不可靠，默认不启用）
   tests/Aria2Common.Tests.ps1
 ```
 
@@ -93,6 +94,7 @@ engine/
   rpc-secret.txt
   aria2.runtime.conf
   session.txt
+  watch.pid
   aria2.log
   rpc.log
 ```
@@ -118,13 +120,13 @@ rpc-save-upload-metadata=true
 
 - 默认不做种；需要私有 tracker 保种时在 Configuration 里提高 `seed-time`。
 - BT 下载过程中仍会上传；只下载/分享有权限的内容。
-- 无公网入站端口/NAT 时 peer 较少、速度受限；端口转发/防火墙需手动，engine 不自动提权。
+- 无公网入站端口/NAT 时 peer 较少、速度受限；首次启动 aria2 可能弹 Windows 防火墙，端口转发/放行需手动，engine 不自动提权。
 
 ### 完成通知
 
-- HTTP / 直链 / 网盘：`on-download-complete` → `Notify-Aria2.ps1 -Event download`
-- BT：`on-bt-download-complete` → `Notify-Aria2.ps1 -Event bt`
-- 错误：`on-download-error`
+- `Start-Aria2Rpc.ps1` 同时启动隐藏的 `Watch-Aria2.ps1`，每 3 秒轮询 RPC。
+- 任务进入 `complete` / `error` 时发 Windows Toast；`Stop` 会结束 watcher。
+- aria2 1.37.0 Windows 的 `on-download-*` hook 在本机实测会 `CreateProcess() failed`，因此默认不写 hook 配置；watcher 是实际通知路径。
 - 通知在扩展关闭后仍有效；扩展本身不做后台轮询。
 
 ## 开发与验证
@@ -157,7 +159,7 @@ docs/         Engine ⇄ Extension contract
 
 ## 已知限制
 
-- Windows 版 Raycast 不支持 MenuBarExtra；本扩展没有常驻 badge/后台通知，完成通知走 aria2 hook。
+- Windows 版 Raycast 不支持 MenuBarExtra；扩展关闭后由隐藏的 `Watch-Aria2.ps1` 轮询 RPC 发送完成/错误 Toast。
 - 扩展关闭后不会继续轮询任务；需要看进度时重新打开 Tasks。
 - Chunk 热力图是固定版式，不按窗口重排列数；窄窗会整体缩小。
 - 网盘 403/412 属于 LinkSwift 的 headers / 直链时效问题，不是 aria2 配置问题。

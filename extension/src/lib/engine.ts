@@ -58,6 +58,17 @@ export async function runEngine(
   timeoutMs = 120_000,
 ): Promise<EngineRunResult> {
   const scriptPath = await assertEngineScript(name);
+  const home = os.homedir();
+  const localAppData =
+    process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+  const tempDir = process.env.TEMP || process.env.TMP || os.tmpdir();
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    LOCALAPPDATA: localAppData,
+    USERPROFILE: process.env.USERPROFILE || home,
+    TEMP: tempDir,
+    TMP: tempDir,
+  };
 
   return new Promise((resolve, reject) => {
     execFile(
@@ -73,7 +84,8 @@ export async function runEngine(
         ...args,
       ],
       {
-        cwd: os.homedir(),
+        cwd: home,
+        env,
         windowsHide: true,
         timeout: timeoutMs,
         maxBuffer: 8 * 1024 * 1024,

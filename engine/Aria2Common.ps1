@@ -43,6 +43,8 @@ $script:Aria2FileNames = @{
     Template = 'aria2.conf'
     HookScript = 'Aria2Hook.vbs'
     NotifyScript = 'Notify-Aria2.ps1'
+    WatchScript = 'Watch-Aria2.ps1'
+    WatchPid = 'watch.pid'
     NotifiedDir = 'notified'
 }
 
@@ -160,10 +162,21 @@ function Get-Aria2StateRoot {
     if (-not [string]::IsNullOrWhiteSpace($env:LAT3NCY_ARIA2_HOME)) {
         return $env:LAT3NCY_ARIA2_HOME.Trim()
     }
-    if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+    $localAppData = $env:LOCALAPPDATA
+    if ([string]::IsNullOrWhiteSpace($localAppData)) {
+        try {
+            $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+        } catch {
+            $localAppData = ''
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($localAppData) -and -not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $localAppData = Join-Path $env:USERPROFILE 'AppData\Local'
+    }
+    if ([string]::IsNullOrWhiteSpace($localAppData)) {
         throw 'LOCALAPPDATA is not defined; cannot resolve the aria2 state directory.'
     }
-    return (Join-Path $env:LOCALAPPDATA 'lat3ncy-toolbox\aria2')
+    return (Join-Path $localAppData 'lat3ncy-toolbox\aria2')
 }
 
 function Get-Aria2StatePaths {
@@ -195,6 +208,8 @@ function Get-Aria2StatePaths {
         TemplateFile = (Join-Path $script:Aria2EngineRoot $script:Aria2FileNames.Template)
         HookScript = (Join-Path $script:Aria2EngineRoot $script:Aria2FileNames.HookScript)
         NotifyScript = (Join-Path $script:Aria2EngineRoot $script:Aria2FileNames.NotifyScript)
+        WatchScript = (Join-Path $script:Aria2EngineRoot $script:Aria2FileNames.WatchScript)
+        WatchPidFile = (Join-Path $rootFull $script:Aria2FileNames.WatchPid)
     }
 }
 
@@ -1250,7 +1265,11 @@ function Get-Aria2HookCommand {
             $wscript = $candidate
         }
     }
-    return ('"' + $wscript + '" //nologo "' + $Paths.HookScript + '" ' + $EventName)
+    $wscriptArg = $wscript
+    if ($wscriptArg -match '\s') {
+        $wscriptArg = '"' + $wscriptArg + '"'
+    }
+    return ($wscriptArg + ' //nologo "' + $Paths.HookScript + '" ' + $EventName)
 }
 
 function Get-Aria2RuntimeConfTokens {
@@ -1269,14 +1288,12 @@ function Get-Aria2RuntimeConfTokens {
         $allProxy = [string]$Settings['allProxy']
         $noProxy = [string]$Settings['noProxy']
     }
+    # aria2's Windows event hooks are unreliable (CreateProcess failures on
+    # some builds), so the engine uses Watch-Aria2.ps1 for notifications and
+    # intentionally leaves the hook options empty.
     $hookDownload = ''
     $hookBt = ''
     $hookError = ''
-    if ([bool]$Settings['notifications']) {
-        $hookDownload = Get-Aria2HookCommand -Paths $Paths -EventName 'download'
-        $hookBt = Get-Aria2HookCommand -Paths $Paths -EventName 'bt'
-        $hookError = Get-Aria2HookCommand -Paths $Paths -EventName 'error'
-    }
     $tokens = @{
         DIR = [string]$Settings['downloadDir']
         SPLIT = (ConvertTo-Aria2InvariantString -Value ([int]$Settings['split']))
@@ -1942,4 +1959,109 @@ function Format-Aria2ByteSize {
         return ($value / 1024.0).ToString('0.0', [System.Globalization.CultureInfo]::InvariantCulture) + ' KB'
     }
     return ([math]::Round($value)).ToString([System.Globalization.CultureInfo]::InvariantCulture) + ' B'
+}
+
+# ---------------------------------------------------------------------------
+# Completion watcher lifecycle
+# ---------------------------------------------------------------------------
+
+function Get-Aria2WatcherProcessId {
+    param([Parameter(Mandatory = $true)]$Paths)
+    if (-not (Test-Path -LiteralPath $Paths.WatchPidFile -PathType Leaf)) {
+        return 0
+    }
+    $pidText = ''
+    try {
+        $pidText = (Get-Content -LiteralPath $Paths.WatchPidFile -Raw -ErrorAction Stop).Trim()
+    } catch {
+        $pidText = ''
+    }
+    $watcherId = 0
+    if (-not [int]::TryParse($pidText, [ref]$watcherId) -or $watcherId -le 0) {
+        Remove-Item -LiteralPath $Paths.WatchPidFile -Force -ErrorAction SilentlyContinue
+        return 0
+    }
+    $process = Get-Process -Id $watcherId -ErrorAction SilentlyContinue
+    if ($null -eq $process) {
+        Remove-Item -LiteralPath $Paths.WatchPidFile -Force -ErrorAction SilentlyContinue
+        return 0
+    }
+    if ($process.ProcessName -ne 'powershell') {
+        Remove-Item -LiteralPath $Paths.WatchPidFile -Force -ErrorAction SilentlyContinue
+        return 0
+    }
+    try {
+        $cim = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + $watcherId) -ErrorAction Stop
+        if ($null -ne $cim -and $null -ne $cim.CommandLine -and $cim.CommandLine -notmatch 'Watch-Aria2\.ps1') {
+            Remove-Item -LiteralPath $Paths.WatchPidFile -Force -ErrorAction SilentlyContinue
+            return 0
+        }
+    } catch {
+        # If CIM is unavailable, keep the process: the pid file is ours.
+    }
+    return $watcherId
+}
+
+function Stop-Aria2Watcher {
+    param([Parameter(Mandatory = $true)]$Paths)
+    $watcherId = Get-Aria2WatcherProcessId -Paths $Paths
+    if ($watcherId -gt 0) {
+        try {
+            Stop-Process -Id $watcherId -Force -ErrorAction Stop
+        } catch {
+        }
+    }
+    Remove-Item -LiteralPath $Paths.WatchPidFile -Force -ErrorAction SilentlyContinue
+}
+
+function Start-Aria2Watcher {
+    param(
+        [Parameter(Mandatory = $true)]$Paths,
+        [switch]$NoToast
+    )
+    try {
+        $settings = $null
+        if (Test-Path -LiteralPath $Paths.SettingsFile -PathType Leaf) {
+            $settings = Read-Aria2Settings -Path $Paths.SettingsFile
+        }
+        if ($null -eq $settings) {
+            $settings = Get-Aria2DefaultSettings
+        }
+        if (-not [bool]$settings['notifications']) {
+            Stop-Aria2Watcher -Paths $Paths
+            return $false
+        }
+        if (-not (Test-Path -LiteralPath $Paths.WatchScript -PathType Leaf)) {
+            Write-Aria2EngineLog -Paths $Paths -Message 'watch: script missing; completion notifications disabled' -Level 'ERROR'
+            return $false
+        }
+        $existing = Get-Aria2WatcherProcessId -Paths $Paths
+        if ($existing -gt 0) {
+            return $true
+        }
+
+        $powerShell = 'powershell.exe'
+        if (-not [string]::IsNullOrWhiteSpace($env:SystemRoot)) {
+            $candidate = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                $powerShell = $candidate
+            }
+        }
+        $arguments = @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-WindowStyle', 'Hidden',
+            '-File', ('"' + $Paths.WatchScript + '"'),
+            '-IntervalSeconds', '3'
+        )
+        if ($NoToast) {
+            $arguments += '-NoToast'
+        }
+        $process = Start-Process -FilePath $powerShell -ArgumentList $arguments -WindowStyle Hidden -PassThru -ErrorAction Stop
+        Set-Content -LiteralPath $Paths.WatchPidFile -Value ([string]$process.Id) -Encoding ASCII -Force
+        Write-Aria2EngineLog -Paths $Paths -Message ('watch: started pid=' + $process.Id)
+        return $true
+    } catch {
+        Write-Aria2EngineLog -Paths $Paths -Message ('watch: start failed: ' + (Get-Aria2ErrorMessage -ErrorRecord $_)) -Level 'ERROR'
+        return $false
+    }
 }

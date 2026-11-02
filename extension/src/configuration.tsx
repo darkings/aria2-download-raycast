@@ -71,7 +71,7 @@ function toSettings(
   return {
     ...current,
     rpcPort: toNumber(values.rpcPort, current.rpcPort),
-    downloadDir: values.downloadDir[0] ?? current.downloadDir,
+    downloadDir: values.downloadDir?.[0] ?? current.downloadDir,
     connections: toNumber(values.connections, current.connections),
     split: toNumber(values.split, current.split),
     minSplitSize: values.minSplitSize,
