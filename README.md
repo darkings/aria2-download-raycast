@@ -4,7 +4,7 @@ Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwif
 
 - **Extension**：TypeScript / React，Windows-only，Raycast 2.x。
 - **Engine**：PowerShell 5.1，自包含 aria2 初始化、配置、启停、完成通知。
-- **状态**：可用；engine 离线测试 45/45 通过；extension 通过 typecheck / lint / build；已完成 Raycast UI 实测（Tasks、详情 PNG 热力图、Add Download、Add Torrent、Configuration、Start/Stop）及本机直链下载、torrent 添加、watcher 完成/错误通知实测。
+- **状态**：可用；engine 离线测试 45/45 通过；extension 通过 typecheck / lint / build；已完成 Raycast UI 实测（Tasks、详情 PNG 热力图、统一 Add Download、Configuration、Toggle Aria2）及本机直链下载、torrent 添加、watcher 完成/错误通知实测。
 
 ## 功能
 
@@ -13,7 +13,7 @@ Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwif
 - **磁力 / BT**：`magnet:` 链接；DHT / PEX / LPD、端口、加密、做种策略。
 - **网盘**：LinkSwift 油猴脚本把直链与 Cookie / Referer / UA 推送到同一个 RPC。
 - **统一体验**：Tasks 看板、Chunk 热力图、aria2 配置、完成/错误 Toast。
-- **按需启停**：不做开机自启；Raycast 的 Start / Stop 命令显式管理 daemon。
+- **按需启停**：不做开机自启；Raycast 根搜索只保留一个 **Toggle Aria2**，subtitle 显示当前 Running/Stopped/Busy 状态。
 
 ## 快速开始
 
@@ -43,10 +43,9 @@ npm run dev       # Raycast dev extension；或 npm run build 后导入
 | 命令 | 作用 |
 | --- | --- |
 | **Aria2 Tasks** | 统一任务列表；进度、速度、ETA、暂停/删除/打开目录 |
-| **Add Download** | URL / magnet / 剪贴板；目录、连接数、headers |
-| **Add Torrent** | `.torrent` 文件或 Explorer 选中文件 |
+| **Add Download** | 一个入口：URL / magnet / `.torrent` 文件；目录、连接数、headers、做种 |
 | **Aria2 Configuration** | aria2 HTTP + BT + RPC + 通知设置 |
-| **Start Aria2 / Stop Aria2** | 显式启停；Stop 默认只在空闲时执行 |
+| **Toggle Aria2** | Start/Stop 切换；subtitle 显示 `🟢 Running` / `🟡 Busy` / `⚪ Stopped`，后台每分钟刷新 |
 
 ### 4. LinkSwift
 
@@ -99,7 +98,7 @@ engine/
   rpc.log
 ```
 
-`settings.json` 是 aria2 配置的权威来源；`Configuration` 命令写它，`Start` 命令生成 runtime conf。RPC 只监听 loopback，`rpc-listen-all=false`。
+`settings.json` 是 aria2 配置的权威来源；`Configuration` 命令写它，`Toggle Aria2` 启动时生成 runtime conf。RPC 只监听 loopback，`rpc-listen-all=false`。
 
 ### BT 默认值
 

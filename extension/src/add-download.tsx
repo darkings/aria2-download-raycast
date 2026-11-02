@@ -3,21 +3,30 @@ import {
   ActionPanel,
   Clipboard,
   Form,
-  Icon,
   Toast,
   getPreferenceValues,
+  getSelectedFinderItems,
   showToast,
   useNavigation,
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 
-import { addUri, ensureDaemon } from "./lib/rpc";
+import { addTorrent, addUri, ensureDaemon } from "./lib/rpc";
 import { isMagnetUri, isNetdiskUrl } from "./lib/netdisk";
 import { loadSettingsOrDefaults } from "./lib/state";
+import {
+  isTorrentPath,
+  readTorrentBase64,
+  torrentDisplayName,
+} from "./lib/torrent";
 import { Aria2Settings, ExtensionPreferences } from "./lib/types";
 
+type SourceType = "link" | "torrent";
+
 interface FormValues {
+  source: string;
   urls: string;
+  torrent: string[];
   directory: string[];
   out: string;
   split: string;
@@ -28,6 +37,7 @@ interface FormValues {
   authorization: string;
   proxy: string;
   checksum: string;
+  seed: boolean;
   pause: boolean;
   navigate: boolean;
 }
@@ -39,8 +49,9 @@ function messageOf(error: unknown): string {
 function buildHeaders(values: FormValues): string[] {
   const headers: string[] = [];
   if (values.cookie.trim()) headers.push(`Cookie: ${values.cookie.trim()}`);
-  if (values.authorization.trim())
+  if (values.authorization.trim()) {
     headers.push(`Authorization: ${values.authorization.trim()}`);
+  }
   return headers;
 }
 
@@ -48,7 +59,9 @@ export default function AddDownload() {
   const preferences = getPreferenceValues<ExtensionPreferences>();
   const { pop } = useNavigation();
   const [settings, setSettings] = useState<Aria2Settings | null>(null);
+  const [sourceType, setSourceType] = useState<SourceType>("link");
   const [urls, setUrls] = useState("");
+  const [torrent, setTorrent] = useState<string[]>([]);
   const [directory, setDirectory] = useState<string[]>([]);
   const [out, setOut] = useState("");
   const [split, setSplit] = useState("16");
@@ -59,6 +72,7 @@ export default function AddDownload() {
   const [authorization, setAuthorization] = useState("");
   const [proxy, setProxy] = useState("");
   const [checksum, setChecksum] = useState("");
+  const [seed, setSeed] = useState(false);
   const [pause, setPause] = useState(false);
   const [navigate, setNavigate] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,18 +85,35 @@ export default function AddDownload() {
       setSettings(loaded);
       setSplit(String(loaded.split));
       setDirectory(loaded.downloadDir ? [loaded.downloadDir] : []);
+
+      let foundTorrent = false;
       try {
-        const clipboard = await Clipboard.readText();
-        if (
-          clipboard &&
-          (clipboard.startsWith("http://") ||
-            clipboard.startsWith("https://") ||
-            isMagnetUri(clipboard))
-        ) {
-          setUrls(clipboard);
+        const items = await getSelectedFinderItems();
+        const selected = items.find((item) => isTorrentPath(item.path));
+        if (selected) {
+          setSourceType("torrent");
+          setTorrent([selected.path]);
+          foundTorrent = true;
         }
       } catch {
-        // Clipboard access is optional.
+        // Explorer selection is optional.
+      }
+
+      if (!foundTorrent) {
+        try {
+          const clipboard = await Clipboard.readText();
+          if (
+            clipboard &&
+            (clipboard.startsWith("http://") ||
+              clipboard.startsWith("https://") ||
+              isMagnetUri(clipboard))
+          ) {
+            setSourceType("link");
+            setUrls(clipboard);
+          }
+        } catch {
+          // Clipboard access is optional.
+        }
       }
       setIsLoading(false);
     }
@@ -95,19 +126,79 @@ export default function AddDownload() {
   async function submit(values: FormValues) {
     values = {
       ...values,
-      urls: values.urls ?? urls,
-      directory: values.directory ?? directory,
-      out: values.out ?? out,
-      split: values.split ?? split,
-      userAgent: values.userAgent ?? userAgent,
-      referer: values.referer ?? referer,
-      cookie: values.cookie ?? cookie,
-      authorization: values.authorization ?? authorization,
-      proxy: values.proxy ?? proxy,
-      checksum: values.checksum ?? checksum,
-      pause: values.pause ?? pause,
-      navigate: values.navigate ?? navigate,
+      source: sourceType,
+      urls,
+      torrent,
+      directory,
+      out,
+      split,
+      userAgent,
+      referer,
+      cookie,
+      authorization,
+      proxy,
+      checksum,
+      seed,
+      pause,
+      navigate,
     };
+
+    if (sourceType === "torrent") {
+      await submitTorrent(values);
+      return;
+    }
+    await submitLinks(values);
+  }
+
+  async function submitTorrent(values: FormValues) {
+    const filePath = values.torrent[0];
+    if (!filePath) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Choose a .torrent file",
+      });
+      return;
+    }
+    if (!isTorrentPath(filePath)) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "The selected file is not a .torrent",
+      });
+      return;
+    }
+
+    const toast = await showToast({
+      style: Toast.Style.Animated,
+      title: "Reading torrent…",
+    });
+    try {
+      const base64 = await readTorrentBase64(filePath);
+      const options: Record<string, string | string[]> = {};
+      if (values.directory.length > 0) options.dir = values.directory[0];
+      if (values.pause) options.pause = "true";
+      if (values.seed && settings) {
+        options["seed-time"] = String(
+          settings.seedTime > 0 ? settings.seedTime : 60,
+        );
+        options["seed-ratio"] = String(settings.seedRatio);
+      } else {
+        options["seed-time"] = "0";
+      }
+      await ensureDaemon();
+      toast.title = "Adding torrent…";
+      await addTorrent(base64, options);
+      toast.style = Toast.Style.Success;
+      toast.title = "Torrent added";
+      toast.message = torrentDisplayName(filePath);
+      if (values.navigate) pop();
+    } catch (error) {
+      toast.style = Toast.Style.Failure;
+      toast.title = "Could not add torrent";
+      toast.message = messageOf(error);
+    }
+  }
+
+  async function submitLinks(values: FormValues) {
     const lines = values.urls
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -137,10 +228,12 @@ export default function AddDownload() {
       "min-split-size": settings?.minSplitSize ?? "1M",
     };
     if (values.directory.length > 0) options.dir = values.directory[0];
-    if (values.out.trim() && lines.length === 1)
+    if (values.out.trim() && lines.length === 1) {
       options.out = values.out.trim();
-    if (values.userAgent.trim())
+    }
+    if (values.userAgent.trim()) {
       options["user-agent"] = values.userAgent.trim();
+    }
     if (values.referer.trim()) options.referer = values.referer.trim();
     if (values.proxy.trim()) options["all-proxy"] = values.proxy.trim();
     if (values.checksum.trim()) options.checksum = values.checksum.trim();
@@ -182,28 +275,131 @@ export default function AddDownload() {
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Add Download" onSubmit={submit} />
-          <Action
-            title="Paste Clipboard"
-            icon={Icon.Clipboard}
-            onAction={async () => {
-              const text = await Clipboard.readText();
-              if (text) setUrls(text);
-            }}
-          />
         </ActionPanel>
       }
     >
-      <Form.TextArea
-        id="urls"
-        title="URLs"
-        placeholder={"https://example.com/file.iso\nmagnet:?xt=urn:btih:…"}
-        info="One URL or magnet per line. Netdisk direct links should be pushed by LinkSwift instead."
-        value={urls}
-        onChange={setUrls}
-      />
-      <Form.Description
-        text={`RPC: ${preferences.rpcEndpoint || `127.0.0.1:${settings.rpcPort}`} · ${settings.downloadDir}`}
-      />
+      <Form.Dropdown
+        id="source"
+        title="Source"
+        value={sourceType}
+        onChange={(value) => setSourceType(value as SourceType)}
+      >
+        <Form.Dropdown.Item value="link" title="URL / Magnet" />
+        <Form.Dropdown.Item value="torrent" title="Torrent File" />
+      </Form.Dropdown>
+
+      {sourceType === "link" ? (
+        <>
+          <Form.TextArea
+            id="urls"
+            title="URLs"
+            placeholder={"https://example.com/file.iso\nmagnet:?xt=urn:btih:…"}
+            info="One URL or magnet per line. Netdisk direct links should be pushed by LinkSwift instead."
+            value={urls}
+            onChange={setUrls}
+          />
+          <Form.Description
+            text={`RPC: ${preferences.rpcEndpoint || `127.0.0.1:${settings.rpcPort}`} · ${settings.downloadDir}`}
+          />
+          <Form.TextField
+            id="out"
+            title="Rename"
+            placeholder="Leave empty to use the remote file name"
+            value={out}
+            onChange={setOut}
+          />
+          <Form.Dropdown
+            id="split"
+            title="Connections"
+            value={split}
+            onChange={setSplit}
+          >
+            <Form.Dropdown.Item value="1" title="1" />
+            <Form.Dropdown.Item value="4" title="4" />
+            <Form.Dropdown.Item value="8" title="8" />
+            <Form.Dropdown.Item value="16" title="16 (recommended)" />
+          </Form.Dropdown>
+          <Form.Checkbox
+            id="showAdvanced"
+            label="Advanced request options"
+            value={showAdvanced}
+            onChange={setShowAdvanced}
+          />
+          {showAdvanced && (
+            <>
+              <Form.Separator />
+              <Form.TextField
+                id="userAgent"
+                title="User-Agent"
+                placeholder="Optional. LinkSwift sends its own per task."
+                value={userAgent}
+                onChange={setUserAgent}
+              />
+              <Form.TextField
+                id="referer"
+                title="Referer"
+                placeholder="Optional. LinkSwift sends its own per task."
+                value={referer}
+                onChange={setReferer}
+              />
+              <Form.PasswordField
+                id="cookie"
+                title="Cookie"
+                placeholder="Optional; keep empty for normal direct links"
+                value={cookie}
+                onChange={setCookie}
+              />
+              <Form.PasswordField
+                id="authorization"
+                title="Authorization"
+                placeholder="Optional header value"
+                value={authorization}
+                onChange={setAuthorization}
+              />
+              <Form.TextField
+                id="proxy"
+                title="Proxy"
+                placeholder="Optional all-proxy, e.g. http://127.0.0.1:7890"
+                value={proxy}
+                onChange={setProxy}
+              />
+              <Form.TextField
+                id="checksum"
+                title="Checksum"
+                placeholder="Optional, e.g. sha-256=…"
+                value={checksum}
+                onChange={setChecksum}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <Form.FilePicker
+            id="torrent"
+            title="Torrent File"
+            value={torrent}
+            onChange={(paths) => {
+              setTorrent(paths);
+              if (paths.length > 0) setSourceType("torrent");
+            }}
+            canChooseFiles
+            canChooseDirectories={false}
+            allowMultipleSelection={false}
+          />
+          <Form.Description
+            text={`RPC: ${preferences.rpcEndpoint || `127.0.0.1:${settings.rpcPort}`} · ${settings.downloadDir}`}
+          />
+          <Form.Checkbox
+            id="seed"
+            label="Seed after download (respect private tracker rules)"
+            value={seed}
+            onChange={setSeed}
+          />
+          <Form.Description text="Seeding is off by default (seed-time=0). BT still uploads while downloading." />
+        </>
+      )}
+
       <Form.FilePicker
         id="directory"
         title="Save Directory"
@@ -213,78 +409,6 @@ export default function AddDownload() {
         canChooseFiles={false}
         allowMultipleSelection={false}
       />
-      <Form.TextField
-        id="out"
-        title="Rename"
-        placeholder="Leave empty to use the remote file name"
-        value={out}
-        onChange={setOut}
-      />
-      <Form.Dropdown
-        id="split"
-        title="Connections"
-        value={split}
-        onChange={setSplit}
-      >
-        <Form.Dropdown.Item value="1" title="1" />
-        <Form.Dropdown.Item value="4" title="4" />
-        <Form.Dropdown.Item value="8" title="8" />
-        <Form.Dropdown.Item value="16" title="16 (recommended)" />
-      </Form.Dropdown>
-      <Form.Checkbox
-        id="showAdvanced"
-        label="Advanced request options"
-        value={showAdvanced}
-        onChange={setShowAdvanced}
-      />
-      {showAdvanced && (
-        <>
-          <Form.Separator />
-          <Form.TextField
-            id="userAgent"
-            title="User-Agent"
-            placeholder="Optional. LinkSwift sends its own per task."
-            value={userAgent}
-            onChange={setUserAgent}
-          />
-          <Form.TextField
-            id="referer"
-            title="Referer"
-            placeholder="Optional. LinkSwift sends its own per task."
-            value={referer}
-            onChange={setReferer}
-          />
-          <Form.PasswordField
-            id="cookie"
-            title="Cookie"
-            placeholder="Optional; keep empty for normal direct links"
-            value={cookie}
-            onChange={setCookie}
-          />
-          <Form.PasswordField
-            id="authorization"
-            title="Authorization"
-            placeholder="Optional header value"
-            value={authorization}
-            onChange={setAuthorization}
-          />
-          <Form.TextField
-            id="proxy"
-            title="Proxy"
-            placeholder="Optional all-proxy, e.g. http://127.0.0.1:7890"
-            value={proxy}
-            onChange={setProxy}
-          />
-          <Form.TextField
-            id="checksum"
-            title="Checksum"
-            placeholder="Optional, e.g. sha-256=…"
-            value={checksum}
-            onChange={setChecksum}
-          />
-        </>
-      )}
-      <Form.Separator />
       <Form.Checkbox
         id="pause"
         label="Add as paused"

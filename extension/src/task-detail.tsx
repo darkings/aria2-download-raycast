@@ -209,7 +209,11 @@ function taskActions(
             if (isStopped) await removeTaskResult(task.gid);
             else await removeTask(task.gid);
             await showToast({ style: Toast.Style.Success, title: "Removed" });
-            refresh();
+            if (onBack) {
+              onBack();
+            } else {
+              refresh();
+            }
           } catch (error) {
             await showToast({
               style: Toast.Style.Failure,
@@ -338,7 +342,7 @@ function MosaicDetail({
   const numPieces = Number.parseInt(task.numPieces ?? "0", 10);
   const grid = aggregateBitfield(task.bitfield, numPieces, columns, 12);
   const progress = getTaskProgress(task);
-  const { push } = useNavigation();
+  const { push, pop } = useNavigation();
 
   if (!grid) {
     return (
@@ -355,7 +359,7 @@ function MosaicDetail({
           `**${progress.toFixed(1)}%** · ${formatSpeed(task.downloadSpeed)}`,
         ].join("\n")}
         metadata={metadataFor(task)}
-        actions={taskActions(task, refresh)}
+        actions={taskActions(task, refresh, pop)}
       />
     );
   }
@@ -379,7 +383,7 @@ function MosaicDetail({
       aspectRatio="1"
       fit={Grid.Fit.Fill}
       inset={Grid.Inset.Small}
-      actions={taskActions(task, refresh, undefined, () =>
+      actions={taskActions(task, refresh, pop, () =>
         push(<TaskMetadataDetail task={task} />),
       )}
     >

@@ -141,6 +141,53 @@ export async function getGlobalStat(): Promise<GlobalStat> {
   return rpc<GlobalStat>("aria2.getGlobalStat");
 }
 
+export type DaemonState = "stopped" | "running" | "busy" | "error";
+
+export interface DaemonStatus {
+  state: DaemonState;
+  active: number;
+  waiting: number;
+  downloadSpeed: string;
+  error?: string;
+}
+
+export async function getDaemonStatus(): Promise<DaemonStatus> {
+  try {
+    await getVersion();
+  } catch (error) {
+    if (error instanceof RpcError && error.code === 401) {
+      return {
+        state: "error",
+        active: 0,
+        waiting: 0,
+        downloadSpeed: "0",
+        error: error.message,
+      };
+    }
+    return { state: "stopped", active: 0, waiting: 0, downloadSpeed: "0" };
+  }
+
+  try {
+    const stat = await getGlobalStat();
+    const active = Number.parseInt(stat.numActive || "0", 10) || 0;
+    const waiting = Number.parseInt(stat.numWaiting || "0", 10) || 0;
+    return {
+      state: active + waiting > 0 ? "busy" : "running",
+      active,
+      waiting,
+      downloadSpeed: stat.downloadSpeed || "0",
+    };
+  } catch (error) {
+    return {
+      state: "error",
+      active: 0,
+      waiting: 0,
+      downloadSpeed: "0",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function tellActive(): Promise<Aria2Task[]> {
   return rpc<Aria2Task[]>("aria2.tellActive");
 }
@@ -177,6 +224,7 @@ export async function getAllTasks(): Promise<Aria2Task[]> {
   ]);
   const seen = new Set<string>();
   return [...active, ...waiting, ...stopped].filter((task) => {
+    if (task.status === "removed") return false;
     if (seen.has(task.gid)) return false;
     seen.add(task.gid);
     return true;

@@ -16,7 +16,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import AddDownload from "./add-download";
-import AddTorrent from "./add-torrent";
 import Configuration from "./configuration";
 import TaskDetail from "./task-detail";
 import {
@@ -26,6 +25,7 @@ import {
   resumeTask,
   getAllTasks,
   ensureDaemon,
+  isDaemonRunning,
 } from "./lib/rpc";
 import { startDaemon, stopDaemon } from "./lib/engine";
 import { formatBytes, formatEta, formatSpeed } from "./lib/format";
@@ -57,8 +57,7 @@ function taskActions(
   task: Aria2Task,
   onRefresh: () => void,
   onOpenDetail: () => void,
-  onStart: () => void,
-  onStop: () => void,
+  onToggle: () => void,
 ): React.ReactNode {
   const uri = getPrimaryUri(task);
   const isActive = isActiveTask(task);
@@ -156,8 +155,7 @@ function taskActions(
         />
       )}
       <ActionPanel.Section title="aria2">
-        <Action title="Start Aria2" icon={Icon.Play} onAction={onStart} />
-        <Action title="Stop Aria2" icon={Icon.Stop} onAction={onStop} />
+        <Action title="Toggle Aria2" icon={Icon.Switch} onAction={onToggle} />
         <Action
           title="Refresh"
           icon={Icon.ArrowClockwise}
@@ -169,11 +167,6 @@ function taskActions(
           title="Add Download"
           icon={Icon.Plus}
           target={<AddDownload />}
-        />
-        <Action.Push
-          title="Add Torrent"
-          icon={Icon.Download}
-          target={<AddTorrent />}
         />
         <Action.Push
           title="Aria2 Configuration"
@@ -220,34 +213,26 @@ export default function Tasks() {
     }
   }, []);
 
-  const start = useCallback(async () => {
+  const toggle = useCallback(async () => {
     const toast = await showToast({
       style: Toast.Style.Animated,
-      title: "Starting aria2…",
+      title: "Toggling aria2…",
     });
     try {
-      await startDaemon();
-      toast.style = Toast.Style.Success;
-      toast.title = "aria2 is ready";
+      if (await isDaemonRunning()) {
+        await stopDaemon({ onlyIfIdle: true });
+        toast.style = Toast.Style.Success;
+        toast.title = "aria2 stopped";
+      } else {
+        await startDaemon();
+        toast.style = Toast.Style.Success;
+        toast.title = "aria2 is ready";
+      }
       await refresh();
     } catch (error) {
       toast.style = Toast.Style.Failure;
-      toast.title = "Could not start aria2";
+      toast.title = "Could not toggle aria2";
       toast.message = errorMessage(error);
-    }
-  }, [refresh]);
-
-  const stop = useCallback(async () => {
-    try {
-      await stopDaemon({ onlyIfIdle: true });
-      await showToast({ style: Toast.Style.Success, title: "aria2 stopped" });
-      await refresh();
-    } catch (error) {
-      await showToast({
-        style: Toast.Style.Failure,
-        title: "Could not stop aria2",
-        message: errorMessage(error),
-      });
     }
   }, [refresh]);
 
@@ -296,16 +281,11 @@ export default function Tasks() {
       }
       actions={
         <ActionPanel>
-          <Action title="Start Aria2" icon={Icon.Play} onAction={start} />
+          <Action title="Toggle Aria2" icon={Icon.Switch} onAction={toggle} />
           <Action.Push
             title="Add Download"
             icon={Icon.Plus}
             target={<AddDownload />}
-          />
-          <Action.Push
-            title="Add Torrent"
-            icon={Icon.Download}
-            target={<AddTorrent />}
           />
           <Action
             title="Refresh"
@@ -328,18 +308,13 @@ export default function Tasks() {
             icon={Icon.ArrowClockwise}
             onAction={refresh}
           />
-          <Action title="Start Aria2" icon={Icon.Play} onAction={start} />
-          <Action title="Stop Aria2" icon={Icon.Stop} onAction={stop} />
+          <Action title="Toggle Aria2" icon={Icon.Switch} onAction={toggle} />
+
           <ActionPanel.Section title="New">
             <Action.Push
               title="Add Download"
               icon={Icon.Plus}
               target={<AddDownload />}
-            />
-            <Action.Push
-              title="Add Torrent"
-              icon={Icon.Download}
-              target={<AddTorrent />}
             />
             <Action.Push
               title="Aria2 Configuration"
@@ -418,8 +393,7 @@ export default function Tasks() {
                   task,
                   refresh,
                   () => push(<TaskDetail gid={task.gid} />),
-                  start,
-                  stop,
+                  toggle,
                 )}
               />
             );

@@ -18,10 +18,9 @@ npm run build
 ## Commands
 
 - **Aria2 Tasks** — unified list for direct URLs, torrents, magnet/BT and LinkSwift netdisk tasks.
-- **Add Download** — URLs or magnet links, directory, connections, advanced headers.
-- **Add Torrent** — local `.torrent` or Explorer-selected torrent file.
+- **Add Download** — one entry for URLs, magnet links, and local `.torrent` files; source selector, directory, connections, advanced headers, seeding.
 - **Aria2 Configuration** — aria2 settings (HTTP + BT), saved to `settings.json`.
-- **Start / Stop aria2** — explicit daemon lifecycle; no background daemon.
+- **Toggle Aria2** — one no-view command; dynamic subtitle shows Running/Stopped/Busy, refreshed in the background every minute.
 
 ## Chunk view
 
@@ -55,7 +54,7 @@ The extension does not download aria2 by itself. Run `engine\Initialize-Aria2.ps
 powershell -NoProfile -ExecutionPolicy Bypass -File ..\engine\Initialize-Aria2.ps1
 ```
 
-Then start aria2 with the **Start Aria2** command.
+Then toggle aria2 with the **Toggle Aria2** command.
 
 ## LinkSwift
 
