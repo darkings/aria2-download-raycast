@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Raycast build output
+dist/
+*.rayext
+extension/raycast-env.d.ts
+
+# Bundled engine copy (generated from ../engine)
+extension/assets/engine/
+
+# Runtime / temp
+*.log
+.tmp/
+.local/
+.tmp-logs*.sqlite
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
