@@ -9,11 +9,11 @@ Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwif
 ## 功能
 
 - **直链**：HTTP / HTTPS / FTP；目录、重命名、16 连接、headers、校验和。
-- **种子**：`.torrent` 文件选择器或 Explorer 选中文件；多文件任务。
+- **种子**：`.torrent` 文件选择器、Explorer 选中文件，或 http(s) `.torrent` URL；多文件任务。
 - **磁力 / BT**：`magnet:` 链接；DHT / PEX / LPD、端口、加密、做种策略。
 - **网盘**：LinkSwift 油猴脚本把直链与 Cookie / Referer / UA 推送到同一个 RPC。
 - **统一体验**：Tasks 看板、Chunk 热力图、aria2 配置、完成/错误 Toast。
-- **按需启停**：不做开机自启；Raycast 根搜索只保留一个 **Toggle Aria2**，subtitle 显示当前 Running/Stopped/Busy 状态。
+- **按需启停**：不做开机自启；Raycast 根搜索只保留一个 **Toggle Aria2**，subtitle 显示当前 Running/Stopped/Busy 状态。busy 时可确认后 Force Stop。
 - **自动启停**：Configuration 可选“添加下载时自动启动 aria2”和“全部下载完成后自动关闭 aria2”，默认开启。
 
 ## 快速开始
@@ -45,9 +45,9 @@ npm run dev       # Raycast dev extension；或 npm run build 后导入
 | 命令 | 作用 |
 | --- | --- |
 | **Aria2 Tasks** | 统一任务列表；进度、速度、ETA、暂停/删除/打开目录 |
-| **Add Download** | 一个入口：URL / magnet / `.torrent` 文件；目录、连接数、headers、做种 |
+| **Add Download** | 一个入口：URL / magnet / `.torrent` 文件 / 远程 `.torrent` URL；目录、连接数、headers、做种 |
 | **Aria2 Configuration** | aria2 HTTP + BT + RPC + 通知设置；自动启动/自动关闭开关 |
-| **Toggle Aria2** | Start/Stop 切换；subtitle 显示 `🟢 Running` / `🟡 Busy` / `⚪ Stopped`，后台每分钟刷新 |
+| **Toggle Aria2** | Start/Stop 切换、busy 时 Force Stop；subtitle 显示 `🟢 Running` / `🟡 Busy` / `⚪ Stopped`，后台每分钟刷新 |
 
 ### 4. LinkSwift
 
