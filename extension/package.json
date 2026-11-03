@@ -4,7 +4,7 @@
   "title": "Aria2 Download",
   "description": "One queue for direct URLs, torrents, magnet/BT, and netdisk links pushed by LinkSwift.",
   "icon": "icon.png",
-  "author": "darkings",
+  "author": "1at3ncy",
   "license": "MIT",
   "platforms": [
     "Windows"
