@@ -137,6 +137,8 @@ function taskActions(
   refresh: () => void,
   onBack?: () => void,
   onShowDetails?: () => void,
+  chunkViz?: "heatmap" | "mosaic",
+  onToggleChunkView?: () => void,
 ): React.ReactNode {
   const isActive = isActiveTask(task);
   const isWaiting = isWaitingTask(task);
@@ -150,6 +152,18 @@ function taskActions(
           title="Show Metadata"
           icon={Icon.Info}
           onAction={onShowDetails}
+        />
+      )}
+      {onToggleChunkView && (
+        <Action
+          title={
+            chunkViz === "mosaic"
+              ? "Switch to Heatmap"
+              : "Switch to Native Mosaic"
+          }
+          icon={Icon.AppWindowGrid3x3}
+          shortcut={{ modifiers: ["ctrl"], key: "m" }}
+          onAction={onToggleChunkView}
         />
       )}
       {isActive && (
@@ -344,9 +358,13 @@ function TaskMetadataDetail({ task }: { task: Aria2Task }) {
 function MosaicDetail({
   task,
   refresh,
+  chunkViz,
+  onToggleChunkView,
 }: {
   task: Aria2Task;
   refresh: () => void;
+  chunkViz: "heatmap" | "mosaic";
+  onToggleChunkView: () => void;
 }) {
   const columns = 8;
   const numPieces = Number.parseInt(task.numPieces ?? "0", 10);
@@ -369,7 +387,14 @@ function MosaicDetail({
           `**${progress.toFixed(1)}%** · ${formatSpeed(task.downloadSpeed)}`,
         ].join("\n")}
         metadata={metadataFor(task)}
-        actions={taskActions(task, refresh, pop)}
+        actions={taskActions(
+          task,
+          refresh,
+          pop,
+          undefined,
+          chunkViz,
+          onToggleChunkView,
+        )}
       />
     );
   }
@@ -393,8 +418,13 @@ function MosaicDetail({
       aspectRatio="1"
       fit={Grid.Fit.Fill}
       inset={Grid.Inset.Small}
-      actions={taskActions(task, refresh, pop, () =>
-        push(<TaskMetadataDetail task={task} />),
+      actions={taskActions(
+        task,
+        refresh,
+        pop,
+        () => push(<TaskMetadataDetail task={task} />),
+        chunkViz,
+        onToggleChunkView,
       )}
     >
       {cells.map((cell) => (
@@ -428,6 +458,9 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
     refreshSeconds,
   );
   const { pop } = useNavigation();
+  const [chunkViz, setChunkViz] = useState<"heatmap" | "mosaic">(
+    preferences.chunkViz,
+  );
   const [heatmapPath, setHeatmapPath] = useState<string | null>(null);
   const [heatmapError, setHeatmapError] = useState(false);
   const lastHash = useRef<string | null>(null);
@@ -444,7 +477,7 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
   );
 
   useEffect(() => {
-    if (!task || preferences.chunkViz === "mosaic" || !grid) {
+    if (!task || chunkViz === "mosaic" || !grid) {
       setHeatmapPath(null);
       setHeatmapError(false);
       return;
@@ -474,10 +507,21 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [task, grid, heatmapPath, numPieces, preferences.chunkViz]);
+  }, [task, grid, heatmapPath, numPieces, chunkViz]);
 
-  if (preferences.chunkViz === "mosaic" && task) {
-    return <MosaicDetail task={task} refresh={refresh} />;
+  if (chunkViz === "mosaic" && task) {
+    return (
+      <MosaicDetail
+        task={task}
+        refresh={refresh}
+        chunkViz={chunkViz}
+        onToggleChunkView={() =>
+          setChunkViz((current) =>
+            current === "mosaic" ? "heatmap" : "mosaic",
+          )
+        }
+      />
+    );
   }
 
   if (!task) {
@@ -553,7 +597,9 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
       navigationTitle={`${getTaskName(task)} · ${progress.toFixed(0)}%`}
       markdown={markdown}
       metadata={metadataFor(task)}
-      actions={taskActions(task, refresh, pop)}
+      actions={taskActions(task, refresh, pop, undefined, chunkViz, () =>
+        setChunkViz((current) => (current === "mosaic" ? "heatmap" : "mosaic")),
+      )}
     />
   );
 }
