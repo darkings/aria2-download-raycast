@@ -26,14 +26,21 @@ export async function writeHeatmapFile(
 
   try {
     const files = await fs.readdir(supportPath);
+    const currentName = path.basename(filePath);
     const mine = files
       .filter(
         (name) => name.startsWith(`chunk-${gid}-`) && name.endsWith(".png"),
       )
       .sort()
       .reverse();
-    for (const old of mine.slice(3)) {
-      await fs.rm(path.join(supportPath, old), { force: true });
+    const keep = new Set([
+      currentName,
+      ...mine.filter((name) => name !== currentName).slice(0, 2),
+    ]);
+    for (const old of mine) {
+      if (!keep.has(old)) {
+        await fs.rm(path.join(supportPath, old), { force: true });
+      }
     }
     const legacy = files.filter(
       (name) => name.startsWith(`chunk-${gid}-`) && name.endsWith(".svg"),
