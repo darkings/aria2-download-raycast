@@ -22,7 +22,7 @@ import {
   aggregateBitfield,
   hashBitfield,
 } from "./lib/bitfield";
-import { chunkLegend, heatmapMarkdown, writeHeatmapFile } from "./lib/heatmap";
+import { heatmapMarkdown, writeHeatmapFile } from "./lib/heatmap";
 import {
   formatBytes,
   formatEta,
@@ -520,7 +520,7 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
     )}`,
     "",
     heatmapPath
-      ? `${heatmapMarkdown(heatmapPath)}\n\n${chunkLegend()}`
+      ? heatmapMarkdown(heatmapPath)
       : heatmapError
         ? "Heatmap image is unavailable. Switch **Chunk View** to **Native Mosaic** in the extension preferences."
         : bitfieldAvailable

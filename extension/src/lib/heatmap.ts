@@ -51,7 +51,3 @@ export async function writeHeatmapFile(
 export function heatmapMarkdown(filePath: string): string {
   return `![Chunk map](${pathToFileURL(filePath).href})`;
 }
-
-export function chunkLegend(): string {
-  return "🟩 complete · 🟨 partial · ⬜ missing · the map follows aria2 pieces, not per-connection offsets";
-}
