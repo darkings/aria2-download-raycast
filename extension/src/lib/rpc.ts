@@ -8,7 +8,6 @@ import {
   GlobalStat,
 } from "./types";
 import { loadSettings, readSecret } from "./state";
-import { startDaemon } from "./engine";
 
 export class RpcError extends Error {
   readonly code?: number;
@@ -118,23 +117,6 @@ export async function isDaemonRunning(): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export async function ensureDaemon(): Promise<void> {
-  const preferences = getPreferences();
-  if (await isDaemonRunning()) return;
-  if (!preferences.autoStartDaemon) {
-    throw new RpcError(
-      "aria2 RPC is not running. Start it with the Start Aria2 command.",
-      4,
-    );
-  }
-  await startDaemon();
-  for (let attempt = 0; attempt < 15; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    if (await isDaemonRunning()) return;
-  }
-  throw new RpcError("aria2 RPC did not become ready after starting.", 4);
 }
 
 export async function getGlobalStat(): Promise<GlobalStat> {

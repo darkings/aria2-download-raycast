@@ -11,7 +11,8 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 
-import { addTorrent, addUri, ensureDaemon } from "./lib/rpc";
+import { addTorrent, addUri, isDaemonRunning } from "./lib/rpc";
+import { startDaemon } from "./lib/engine";
 import { isMagnetUri, isNetdiskUrl } from "./lib/netdisk";
 import { loadSettingsOrDefaults } from "./lib/state";
 import {
@@ -123,6 +124,24 @@ export default function AddDownload() {
     };
   }, []);
 
+  async function ensureDaemonForAdd(): Promise<boolean> {
+    if (await isDaemonRunning()) return true;
+    if (settings?.autoStartOnAdd ?? true) {
+      await startDaemon();
+      // Let Watch-Aria2 initialize its baseline before an instant task can
+      // finish, otherwise a very fast download is mistaken for history.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return true;
+    }
+    await showToast({
+      style: Toast.Style.Failure,
+      title: "aria2 is not running",
+      message:
+        "Enable 'Start aria2 when adding a download' in Configuration, or start it with Toggle Aria2.",
+    });
+    return false;
+  }
+
   async function submit(values: FormValues) {
     values = {
       ...values,
@@ -184,7 +203,7 @@ export default function AddDownload() {
       } else {
         options["seed-time"] = "0";
       }
-      await ensureDaemon();
+      if (!(await ensureDaemonForAdd())) return;
       toast.title = "Adding torrent…";
       await addTorrent(base64, options);
       toast.style = Toast.Style.Success;
@@ -246,7 +265,7 @@ export default function AddDownload() {
       title: "Adding download…",
     });
     try {
-      await ensureDaemon();
+      if (!(await ensureDaemonForAdd())) return;
       for (const line of lines) {
         await addUri([line], options);
       }

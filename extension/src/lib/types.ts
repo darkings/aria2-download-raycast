@@ -79,6 +79,8 @@ export interface Aria2Settings {
   lowestSpeedLimit: string;
   saveSessionInterval: number;
   notifications: boolean;
+  autoStartOnAdd: boolean;
+  autoStopWhenIdle: boolean;
   listenPort: number;
   dhtListenPort: number;
   enableDht: boolean;
@@ -116,6 +118,8 @@ export const DEFAULT_SETTINGS: Aria2Settings = {
   lowestSpeedLimit: "0",
   saveSessionInterval: 30,
   notifications: true,
+  autoStartOnAdd: true,
+  autoStopWhenIdle: true,
   listenPort: 6881,
   dhtListenPort: 6881,
   enableDht: true,
@@ -141,7 +145,6 @@ export interface InstallInfo {
 export interface ExtensionPreferences {
   rpcEndpoint: string;
   rpcSecret: string;
-  autoStartDaemon: boolean;
   refreshInterval: string;
   chunkViz: "heatmap" | "mosaic";
   chunkColumns: string;

@@ -24,7 +24,6 @@ import {
   pauseTask,
   resumeTask,
   getAllTasks,
-  ensureDaemon,
   isDaemonRunning,
 } from "./lib/rpc";
 import { startDaemon, stopDaemon } from "./lib/engine";
@@ -239,11 +238,6 @@ export default function Tasks() {
   useEffect(() => {
     let cancelled = false;
     async function boot() {
-      try {
-        await ensureDaemon();
-      } catch (error) {
-        if (!cancelled) setDaemonError(errorMessage(error));
-      }
       if (!cancelled) await refresh();
     }
     boot();

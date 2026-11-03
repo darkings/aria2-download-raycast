@@ -14,6 +14,7 @@ Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwif
 - **网盘**：LinkSwift 油猴脚本把直链与 Cookie / Referer / UA 推送到同一个 RPC。
 - **统一体验**：Tasks 看板、Chunk 热力图、aria2 配置、完成/错误 Toast。
 - **按需启停**：不做开机自启；Raycast 根搜索只保留一个 **Toggle Aria2**，subtitle 显示当前 Running/Stopped/Busy 状态。
+- **自动启停**：Configuration 可选“添加下载时自动启动 aria2”和“全部下载完成后自动关闭 aria2”，默认开启。
 
 ## 快速开始
 
@@ -45,7 +46,7 @@ npm run dev       # Raycast dev extension；或 npm run build 后导入
 | --- | --- |
 | **Aria2 Tasks** | 统一任务列表；进度、速度、ETA、暂停/删除/打开目录 |
 | **Add Download** | 一个入口：URL / magnet / `.torrent` 文件；目录、连接数、headers、做种 |
-| **Aria2 Configuration** | aria2 HTTP + BT + RPC + 通知设置 |
+| **Aria2 Configuration** | aria2 HTTP + BT + RPC + 通知设置；自动启动/自动关闭开关 |
 | **Toggle Aria2** | Start/Stop 切换；subtitle 显示 `🟢 Running` / `🟡 Busy` / `⚪ Stopped`，后台每分钟刷新 |
 
 ### 4. LinkSwift

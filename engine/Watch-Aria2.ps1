@@ -1,11 +1,15 @@
 #requires -Version 5.1
 # Watch-Aria2.ps1
-# Hidden completion/error watcher for the aria2 RPC daemon.
+# Hidden completion/error watcher and optional idle shutdown for aria2.
 #
 # aria2 1.37.0 x64 on Windows can fail CreateProcess() for configured event
 # hooks, so the engine uses this small polling process as the reliable
 # notification path. It starts with the daemon, survives the Raycast extension
 # being closed, and exits a few seconds after the RPC endpoint disappears.
+#
+# When autoStopWhenIdle is enabled, the watcher shuts the daemon down after all
+# downloads have finished. The shutdown is delayed by two polls so a follow-up
+# Add Download has a chance to arrive first.
 #
 # Dedupe markers are shared with Notify-Aria2.ps1: if an aria2 hook ever does
 # fire successfully, the watcher skips that GID.
@@ -38,7 +42,10 @@ try {
     if ($null -eq $settings) {
         $settings = Get-Aria2DefaultSettings
     }
-    if (-not [bool]$settings['notifications']) {
+
+    $notificationsEnabled = [bool]$settings['notifications']
+    $autoStopWhenIdle = [bool]$settings['autoStopWhenIdle']
+    if (-not $notificationsEnabled -and -not $autoStopWhenIdle) {
         exit $exitCodes.Success
     }
 
@@ -47,6 +54,8 @@ try {
         Write-Output ('watch script: ' + $paths.WatchScript)
         Write-Output ('rpc: http://127.0.0.1:' + $port + '/jsonrpc')
         Write-Output ('interval: ' + [string]$IntervalSeconds + 's')
+        Write-Output ('notifications: ' + (Format-Aria2Boolean -Value $notificationsEnabled))
+        Write-Output ('auto stop when idle: ' + (Format-Aria2Boolean -Value $autoStopWhenIdle))
         Write-Output 'dry run: no RPC calls and no notifications'
         exit $exitCodes.Success
     }
@@ -68,6 +77,8 @@ try {
     $consecutiveFailures = 0
     $baseline = $false
     $notifiedThisRun = @{}
+    $hadCompletion = $false
+    $idlePolls = 0
 
     while ($true) {
         if (-not (Test-Aria2RpcAvailable -Port $port -Secret $secret -TimeoutMs 1200)) {
@@ -136,11 +147,15 @@ try {
                 $title = 'Download complete'
                 $body = $body + ' - download complete'
             }
-            $null = Show-Aria2ToastIfEnabled -NoToast:$NoToast -Title $title -Message $body
+
+            if ($notificationsEnabled) {
+                $null = Show-Aria2ToastIfEnabled -NoToast:$NoToast -Title $title -Message $body
+            }
             try {
                 $null = Set-Aria2Notified -Paths $paths -Gid $gid -EventName 'watcher'
             } catch {
             }
+            $hadCompletion = $true
             Write-Aria2EngineLog -Paths $paths -Message ('watch: notified gid=' + $gid + ' status=' + $status)
         }
 
@@ -148,6 +163,37 @@ try {
             $baseline = $true
             Write-Aria2EngineLog -Paths $paths -Message 'watch: baseline initialized'
         }
+
+        if ($autoStopWhenIdle -and $hadCompletion) {
+            $activeCount = 0
+            $waitingCount = 0
+            $statsAvailable = $false
+            try {
+                $stat = Invoke-Aria2Rpc -Port $port -Secret $secret -Method 'aria2.getGlobalStat' -TimeoutMs 3000
+                $activeCount = [int]$stat['numActive']
+                $waitingCount = [int]$stat['numWaiting']
+                $statsAvailable = $true
+            } catch {
+                $statsAvailable = $false
+            }
+
+            if ($statsAvailable -and ($activeCount + $waitingCount) -eq 0) {
+                $idlePolls = $idlePolls + 1
+                if ($idlePolls -ge 2) {
+                    Write-Aria2EngineLog -Paths $paths -Message 'watch: all downloads finished; shutting aria2 down'
+                    try {
+                        $null = Invoke-Aria2Rpc -Port $port -Secret $secret -Method 'aria2.shutdown' -TimeoutMs 3000
+                    } catch {
+                        # A successful shutdown often closes the connection before replying.
+                    }
+                    $null = Wait-Aria2RpcDown -Port $port -Secret $secret -TimeoutSeconds 10
+                    exit $exitCodes.Success
+                }
+            } else {
+                $idlePolls = 0
+            }
+        }
+
         if ($Once) {
             exit $exitCodes.Success
         }

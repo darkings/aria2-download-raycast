@@ -19,7 +19,7 @@ npm run build
 
 - **Aria2 Tasks** — unified list for direct URLs, torrents, magnet/BT and LinkSwift netdisk tasks.
 - **Add Download** — one entry for URLs, magnet links, and local `.torrent` files; source selector, directory, connections, advanced headers, seeding.
-- **Aria2 Configuration** — aria2 settings (HTTP + BT), saved to `settings.json`.
+- **Aria2 Configuration** — aria2 settings (HTTP + BT), auto-start on add, auto-stop when all downloads finish, saved to `settings.json`.
 - **Toggle Aria2** — one no-view command; dynamic subtitle shows Running/Stopped/Busy, refreshed in the background every minute.
 
 ## Chunk view

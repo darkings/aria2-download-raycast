@@ -88,15 +88,6 @@
       "default": ""
     },
     {
-      "name": "autoStartDaemon",
-      "title": "Auto-Start aria2",
-      "label": "Start aria2 when a download command opens",
-      "description": "Start the local RPC daemon if it is not already responding.",
-      "type": "checkbox",
-      "required": false,
-      "default": true
-    },
-    {
       "name": "refreshInterval",
       "title": "Refresh Interval",
       "description": "How often the task list and task detail refresh while open.",

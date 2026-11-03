@@ -289,14 +289,14 @@ try {
             'maxOverallDownloadLimit', 'maxOverallUploadLimit', 'proxyMode',
             'allProxy', 'noProxy', 'checkCertificate', 'connectTimeout',
             'timeout', 'maxTries', 'retryWait', 'lowestSpeedLimit',
-            'saveSessionInterval', 'notifications', 'listenPort', 'dhtListenPort',
+            'saveSessionInterval', 'notifications', 'autoStartOnAdd', 'autoStopWhenIdle', 'listenPort', 'dhtListenPort',
             'enableDht', 'enablePeerExchange', 'btEnableLpd', 'btMaxPeers',
             'btRequireCrypto', 'seedTime', 'seedRatio', 'btSaveMetadata',
             'btLoadSavedMetadata', 'rpcSaveUploadMetadata', 'btTracker'
         )
-        Assert-Equal 34 $expectedKeys.Count
+        Assert-Equal 36 $expectedKeys.Count
         $actualKeys = @($settings.Keys | ForEach-Object { [string]$_ })
-        Assert-Equal 34 $actualKeys.Count
+        Assert-Equal 36 $actualKeys.Count
         Assert-Equal ($expectedKeys -join ',') ($actualKeys -join ',')
         Assert-False ($actualKeys -contains 'rpcSecret')
     }
@@ -323,6 +323,8 @@ try {
         Assert-Equal '0' $settings['lowestSpeedLimit']
         Assert-Equal 30 $settings['saveSessionInterval']
         Assert-Equal $true $settings['notifications']
+        Assert-Equal $true $settings['autoStartOnAdd']
+        Assert-Equal $true $settings['autoStopWhenIdle']
         Assert-Equal 6881 $settings['listenPort']
         Assert-Equal 6881 $settings['dhtListenPort']
         Assert-Equal $true $settings['enableDht']
@@ -362,7 +364,7 @@ try {
         Assert-Equal 'C:\Users\Test User\Downloads' $parsed.downloadDir
         Assert-Equal $true $parsed.checkCertificate
         Assert-Equal $false $parsed.btEnableLpd
-        Assert-Equal 34 @($parsed.PSObject.Properties).Count
+        Assert-Equal 36 @($parsed.PSObject.Properties).Count
         $pretty = ConvertTo-Aria2Json -Value $settings
         Assert-True ($pretty.Contains("`n")) 'Pretty JSON should span lines'
         $prettyParsed = $pretty | ConvertFrom-Json
@@ -409,7 +411,7 @@ try {
         Assert-Equal 8 $merged['connections']
         Assert-Equal 16 $merged['split'] 'split keeps its default when not supplied'
         Assert-False (@($merged.Keys) -contains 'unknownKey')
-        Assert-Equal 34 @($merged.Keys).Count
+        Assert-Equal 36 @($merged.Keys).Count
     }
 
     Test-Case 'merge rejects invalid types' {
@@ -554,7 +556,7 @@ try {
         $partial = Read-Aria2Settings -Path $paths.SettingsFile
         Assert-Equal 7000 $partial['rpcPort']
         Assert-Equal 16 $partial['split']
-        Assert-Equal 34 @($partial.Keys).Count
+        Assert-Equal 36 @($partial.Keys).Count
     }
 
     Test-Case 'settings diff reports changed keys' {
@@ -972,7 +974,7 @@ try {
             Assert-Equal 0 $result.ExitCode ('Get-Aria2Settings failed: ' + $result.Output)
             $jsonLine = Get-LastJsonLine -Text $result.Output
             $parsed = $jsonLine | ConvertFrom-Json
-            Assert-Equal 34 @($parsed.PSObject.Properties).Count
+            Assert-Equal 36 @($parsed.PSObject.Properties).Count
             Assert-Equal 6800 $parsed.rpcPort
             Assert-False (@($parsed.PSObject.Properties.Name) -contains 'rpcSecret')
             Assert-False (Test-Path -LiteralPath $getRoot) 'Read-only Get must not create state'

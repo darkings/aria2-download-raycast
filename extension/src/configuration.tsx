@@ -40,6 +40,8 @@ interface ConfigurationValues {
   lowestSpeedLimit: string;
   saveSessionInterval: string;
   notifications: boolean;
+  autoStartOnAdd: boolean;
+  autoStopWhenIdle: boolean;
   listenPort: string;
   dhtListenPort: string;
   enableDht: boolean;
@@ -100,6 +102,8 @@ function toSettings(
       current.saveSessionInterval,
     ),
     notifications: values.notifications,
+    autoStartOnAdd: values.autoStartOnAdd ?? current.autoStartOnAdd,
+    autoStopWhenIdle: values.autoStopWhenIdle ?? current.autoStopWhenIdle,
     listenPort: toNumber(values.listenPort, current.listenPort),
     dhtListenPort: toNumber(values.dhtListenPort, current.dhtListenPort),
     enableDht: values.enableDht,
@@ -452,6 +456,16 @@ export default function Configuration() {
         id="notifications"
         label="Completion / error hooks (Windows Toast)"
         defaultValue={settings.notifications}
+      />
+      <Form.Checkbox
+        id="autoStartOnAdd"
+        label="Start aria2 when adding a download"
+        defaultValue={settings.autoStartOnAdd}
+      />
+      <Form.Checkbox
+        id="autoStopWhenIdle"
+        label="Stop aria2 after all downloads finish"
+        defaultValue={settings.autoStopWhenIdle}
       />
       <Form.Description
         text={`Current RPC override: ${preferences.rpcEndpoint || "(engine settings)"}`}

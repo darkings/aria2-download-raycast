@@ -71,6 +71,8 @@ $script:Aria2SettingTypes = @{
     lowestSpeedLimit = 'size'
     saveSessionInterval = 'int'
     notifications = 'bool'
+    autoStartOnAdd = 'bool'
+    autoStopWhenIdle = 'bool'
     listenPort = 'int'
     dhtListenPort = 'int'
     enableDht = 'bool'
@@ -627,6 +629,8 @@ function Get-Aria2DefaultSettings {
         lowestSpeedLimit = '0'
         saveSessionInterval = 30
         notifications = $true
+        autoStartOnAdd = $true
+        autoStopWhenIdle = $true
         listenPort = 6881
         dhtListenPort = 6881
         enableDht = $true
@@ -2048,7 +2052,9 @@ function Start-Aria2Watcher {
         if ($null -eq $settings) {
             $settings = Get-Aria2DefaultSettings
         }
-        if (-not [bool]$settings['notifications']) {
+        $notificationsEnabled = [bool]$settings['notifications']
+        $autoStopWhenIdle = [bool]$settings['autoStopWhenIdle']
+        if (-not $notificationsEnabled -and -not $autoStopWhenIdle) {
             Stop-Aria2Watcher -Paths $Paths
             return $false
         }
