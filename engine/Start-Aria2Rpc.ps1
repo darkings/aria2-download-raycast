@@ -52,9 +52,9 @@ try {
         }
     }
 
-    $exePath = Get-Aria2InstalledExePath -Paths $paths
+    $exePath = Find-Aria2ExistingExe -Paths $paths
     if ($null -eq $exePath) {
-        throw (New-Aria2Error 'aria2c.exe is not installed. Run Initialize-Aria2.ps1 first.' $exitCodes.Aria2Missing)
+        throw (New-Aria2Error 'aria2c.exe is not installed. Install aria2 and try again.' $exitCodes.Aria2Missing)
     }
     $arguments = Get-Aria2StartArguments -Paths $paths -Settings $settings
 

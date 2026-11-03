@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { environment } from "@raycast/api";
+import { confirmAlert, environment, open } from "@raycast/api";
 
 import { Aria2Settings } from "./types";
 
@@ -125,8 +125,32 @@ export async function runEngineOrThrow(
   return result;
 }
 
+async function promptAria2Install(): Promise<void> {
+  const shouldOpen = await confirmAlert({
+    title: "aria2 is not installed",
+    message:
+      "Install aria2 first. This extension will automatically use the installed aria2c.exe; no extra setup is required.",
+    primaryAction: { title: "Open aria2 Website" },
+    dismissAction: { title: "Cancel" },
+  });
+  if (shouldOpen) {
+    await open("https://aria2.github.io/");
+  }
+}
+
 export async function startDaemon(): Promise<void> {
-  await runEngineOrThrow("Start-Aria2Rpc.ps1", ["-NoToast"], 90_000);
+  try {
+    await runEngineOrThrow("Start-Aria2Rpc.ps1", ["-NoToast"], 90_000);
+  } catch (error) {
+    const missingAria2 =
+      error instanceof EngineError &&
+      error.code === 3 &&
+      /aria2c\.exe is not installed|aria2.*not installed/i.test(error.message);
+    if (missingAria2) {
+      await promptAria2Install();
+    }
+    throw error;
+  }
 }
 
 export async function stopDaemon(

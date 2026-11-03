@@ -26,8 +26,8 @@ All scripts are Windows PowerShell 5.1, no admin, no console window when invoked
 
 | Script | Invocation | Behaviour |
 | --- | --- | --- |
-| `Initialize-Aria2.ps1` | `-NoToast -DownloadDir <dir> -Connections 16 -Port 6800` | Download pinned aria2 1.37.0 if needed, verify SHA-256, create settings/secret/runtime conf. Never starts the daemon. |
-| `Start-Aria2Rpc.ps1` | `-NoToast` | Idempotent: if RPC already responds, exit 0. Else generate runtime conf, start `aria2c` hidden, wait for `aria2.getVersion`. |
+| `Initialize-Aria2.ps1` | `-NoToast -DownloadDir <dir> -Connections 16 -Port 6800` | Optional fallback: download pinned aria2 1.37.0, verify SHA-256, create settings/secret/runtime conf. Normal installs use the system aria2 detected by Start. |
+| `Start-Aria2Rpc.ps1` | `-NoToast` | Idempotent: if RPC already responds, exit 0. Else find system aria2, generate defaults/runtime conf, start `aria2c` hidden, wait for `aria2.getVersion`. |
 | `Stop-Aria2Rpc.ps1` | `-OnlyIfIdle -NoToast` | Graceful `aria2.shutdown`; refuse if active/waiting unless `-Force`. |
 | `Get-Aria2Settings.ps1` | `-Json` | Print settings JSON to stdout. No secret. |
 | `Set-Aria2Settings.ps1` | `-JsonPath <temp.json>` | Validate, atomically write settings, regenerate runtime conf; print result JSON `{ok:true,restartRequired:bool}`. |

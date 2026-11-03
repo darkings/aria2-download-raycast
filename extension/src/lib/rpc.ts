@@ -42,7 +42,7 @@ export async function getConnection(): Promise<Aria2Connection> {
   const settings = await loadSettings();
   if (!settings) {
     throw new RpcError(
-      "aria2 engine is not initialized. Run the engine Initialize-Aria2.ps1 first.",
+      "aria2 is not configured yet. Open Toggle Aria2 or Add Download to initialize it automatically.",
       2,
     );
   }

@@ -3,7 +3,7 @@
 Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwift 推送）共用同一个 aria2 RPC 与任务队列。
 
 - **Extension**：TypeScript / React，Windows-only，Raycast 2.x。
-- **Engine**：PowerShell 5.1，自包含 aria2 初始化、配置、启停、完成通知。
+- **Engine**：PowerShell 5.1，自动发现系统 aria2，自动生成配置、启停与完成通知。
 - **状态**：可用；engine 离线测试 45/45 通过；extension 通过 typecheck / lint / build；已完成 Raycast UI 实测（Tasks、详情 PNG 热力图、统一 Add Download、Configuration、Toggle Aria2）及本机直链下载、torrent 添加、watcher 完成/错误通知实测。
 
 ## 功能
@@ -17,18 +17,19 @@ Raycast 的 aria2 统一入口：直链、种子、BT/磁力、网盘（LinkSwif
 
 ## 快速开始
 
-### 1. 初始化 engine（一次）
+### 1. 安装 aria2（唯一前置条件）
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\engine\Initialize-Aria2.ps1 -NoToast
+winget install aria2.aria2
+# 或
+scoop install aria2
 ```
 
-它会：
+也可以从 <https://aria2.github.io/> 下载官方 Windows ZIP，并把 `aria2c.exe` 放进 PATH 或常见安装目录。
 
-- 下载官方 aria2 1.37.0 win64 ZIP，校验 SHA-256；
-- 安装到 `%LOCALAPPDATA%\lat3ncy-toolbox\aria2\bin\1.37.0\aria2c.exe`；
-- 生成 `settings.json` / `rpc-secret.txt` / `aria2.runtime.conf`；
-- 不启动 daemon。
+Extension 会自动查找已安装的 `aria2c.exe`，首次启动时自动生成 `settings.json`、`rpc-secret.txt` 和 runtime conf，**不需要再运行 Initialize-Aria2.ps1，也不需要额外配置**。
+
+如果找不到 aria2，Raycast 会弹出提示；确认后会打开 aria2 官网。
 
 ### 2. 启动 Raycast 扩展
 
@@ -73,7 +74,7 @@ Raycast 不提供 Raycast 窗口尺寸 API，因此这里采用**固定版式**�
 engine/
   aria2.conf                 # 运行时 conf 模板（占位符）
   Aria2Common.ps1            # 设置/校验/runtime conf/RPC/日志/Toast
-  Initialize-Aria2.ps1       # 下载、校验、安装、初始化配置
+  Initialize-Aria2.ps1       # 可选：下载并安装 pinned aria2（普通用户装好 aria2 后不需要）
   Start-Aria2Rpc.ps1         # 隐藏启动 + RPC 就绪校验
   Stop-Aria2Rpc.ps1          # 空闲检查 + 优雅/强制停止
   Get-Aria2Settings.ps1      # -Json 输出 settings
@@ -162,7 +163,7 @@ docs/         Engine ⇄ Extension contract
 - 扩展关闭后不会继续轮询任务；需要看进度时重新打开 Tasks。
 - Chunk 热力图是固定版式，不按窗口重排列数；窄窗会整体缩小。
 - 网盘 403/412 属于 LinkSwift 的 headers / 直链时效问题，不是 aria2 配置问题。
-- 本仓库不提交 aria2 二进制；由 `Initialize-Aria2.ps1` 从官方 GitHub 下载并校验。
+- 本仓库不提交 aria2 二进制；默认使用用户已安装的 `aria2c.exe`。`Initialize-Aria2.ps1` 仅作为可选的 pinned 下载/离线安装 fallback。
 
 ## License
 

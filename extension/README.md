@@ -48,13 +48,15 @@ The extension reads `settings.json` and `rpc-secret.txt`; connection preferences
 
 ## Engine setup
 
-The extension does not download aria2 by itself. Run `engine\Initialize-Aria2.ps1` once from PowerShell:
+Install aria2 once:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ..\engine\Initialize-Aria2.ps1
+winget install aria2.aria2
+# or scoop install aria2
+# or use the official Windows ZIP from https://aria2.github.io/
 ```
 
-Then toggle aria2 with the **Toggle Aria2** command.
+The extension automatically discovers `aria2c.exe` in PATH or common install locations. On first start it creates `settings.json`, `rpc-secret.txt` and `aria2.runtime.conf`; no Initialize script or manual configuration is required. If aria2 is missing, Raycast prompts and offers to open the official website.
 
 ## LinkSwift
 

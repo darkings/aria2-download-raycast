@@ -1126,10 +1126,31 @@ function Find-Aria2ExistingExe {
     }
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
         $candidates.Add((Join-Path $env:LOCALAPPDATA 'Programs\aria2\aria2c.exe'))
+        $candidates.Add((Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\aria2c.exe'))
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) {
+        $candidates.Add((Join-Path $env:USERPROFILE 'aria2\aria2c.exe'))
+        $candidates.Add((Join-Path $env:USERPROFILE 'scoop\shims\aria2c.exe'))
+        $candidates.Add((Join-Path $env:USERPROFILE 'scoop\apps\aria2\current\aria2c.exe'))
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramData)) {
+        $candidates.Add((Join-Path $env:ProgramData 'chocolatey\bin\aria2c.exe'))
+        $candidates.Add((Join-Path $env:ProgramData 'chocolatey\lib\aria2\tools\aria2c.exe'))
     }
     foreach ($candidate in $candidates) {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) {
             return $candidate
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $wingetPackages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+        if (Test-Path -LiteralPath $wingetPackages -PathType Container) {
+            foreach ($packageDir in @(Get-ChildItem -LiteralPath $wingetPackages -Directory -Filter 'aria2.aria2_*' -ErrorAction SilentlyContinue)) {
+                $found = Get-ChildItem -LiteralPath $packageDir.FullName -Recurse -Filter 'aria2c.exe' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($null -ne $found) {
+                    return $found.FullName
+                }
+            }
         }
     }
     return $null
