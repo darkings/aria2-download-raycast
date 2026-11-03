@@ -1,5 +1,7 @@
 import {
+  Alert,
   LaunchType,
+  confirmAlert,
   environment,
   showHUD,
   updateCommandMetadata,
@@ -51,9 +53,26 @@ export default async function Toggle() {
     }
   } catch (error) {
     const busy = error instanceof EngineError && error.code === 5;
-    await showHUD(
-      busy ? "aria2 is busy; stop refused" : `aria2: ${messageOf(error)}`,
-    );
+    if (busy) {
+      const force = await confirmAlert({
+        title: "aria2 is busy",
+        message:
+          "Active or queued downloads will be interrupted. Force stop aria2?",
+        primaryAction: {
+          title: "Force Stop",
+          style: Alert.ActionStyle.Destructive,
+        },
+        dismissAction: { title: "Cancel" },
+      });
+      if (force) {
+        await stopDaemon({ onlyIfIdle: false, force: true });
+        await showHUD("aria2 force-stopped");
+      } else {
+        await showHUD("aria2 is busy; stop refused");
+      }
+    } else {
+      await showHUD(`aria2: ${messageOf(error)}`);
+    }
   }
 
   await updateSubtitle(await getDaemonStatus());

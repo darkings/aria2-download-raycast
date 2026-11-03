@@ -260,6 +260,18 @@ export default function AddDownload() {
     const headers = buildHeaders(values);
     if (headers.length > 0) options.header = headers;
 
+    function isTorrentUrl(value: string): boolean {
+      try {
+        const parsed = new URL(value);
+        return (
+          (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+          parsed.pathname.toLowerCase().endsWith(".torrent")
+        );
+      } catch {
+        return false;
+      }
+    }
+
     const toast = await showToast({
       style: Toast.Style.Animated,
       title: "Adding download…",
@@ -267,7 +279,18 @@ export default function AddDownload() {
     try {
       if (!(await ensureDaemonForAdd())) return;
       for (const line of lines) {
-        await addUri([line], options);
+        if (isTorrentUrl(line)) {
+          const response = await fetch(line);
+          if (!response.ok) {
+            throw new Error(
+              `Could not download torrent: HTTP ${response.status}`,
+            );
+          }
+          const bytes = Buffer.from(await response.arrayBuffer());
+          await addTorrent(bytes.toString("base64"), options);
+        } else {
+          await addUri([line], options);
+        }
       }
       toast.style = Toast.Style.Success;
       toast.title =
