@@ -142,6 +142,7 @@ cd extension
 npm run typecheck
 npm run lint
 npm run build
+npm run test:unit
 ```
 
 扩展开发模式：

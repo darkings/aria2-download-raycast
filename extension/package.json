@@ -177,7 +177,8 @@
     "lint": "ray lint",
     "fix-lint": "ray lint --fix",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run lint && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run build",
+    "test:unit": "node --experimental-strip-types --test tests/format.test.ts"
   },
   "dependencies": {
     "@raycast/api": "^2.10.1",
