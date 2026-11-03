@@ -126,6 +126,18 @@ try {
                 continue
             }
 
+            $followedBy = @($task.followedBy | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+            if ($followedBy.Count -gt 0) {
+                # Magnet metadata completion is followed by the actual torrent
+                # task. Do not notify or auto-stop on the metadata artifact.
+                try {
+                    $null = Set-Aria2Notified -Paths $paths -Gid $gid -EventName 'metadata'
+                } catch {
+                }
+                Write-Aria2EngineLog -Paths $paths -Message ('watch: metadata complete; waiting for followed task gid=' + $gid + ' followedBy=' + ($followedBy -join ','))
+                continue
+            }
+
             $name = Get-Aria2TaskName -Status $task
             $sizeText = Format-Aria2ByteSize -Bytes (Get-Aria2StatusNumber -Status $task -Name 'totalLength')
             $body = $name
@@ -179,7 +191,7 @@ try {
 
             if ($statsAvailable -and ($activeCount + $waitingCount) -eq 0) {
                 $idlePolls = $idlePolls + 1
-                if ($idlePolls -ge 2) {
+                if ($idlePolls -ge 4) {
                     Write-Aria2EngineLog -Paths $paths -Message 'watch: all downloads finished; shutting aria2 down'
                     try {
                         $null = Invoke-Aria2Rpc -Port $port -Secret $secret -Method 'aria2.shutdown' -TimeoutMs 3000

@@ -207,6 +207,13 @@ export async function getAllTasks(): Promise<Aria2Task[]> {
   const seen = new Set<string>();
   return [...active, ...waiting, ...stopped].filter((task) => {
     if (task.status === "removed") return false;
+    // A completed magnet metadata task is superseded by its followedBy task.
+    if (
+      task.status === "complete" &&
+      task.files?.[0]?.path?.startsWith("[METADATA]")
+    ) {
+      return false;
+    }
     if (seen.has(task.gid)) return false;
     seen.add(task.gid);
     return true;
