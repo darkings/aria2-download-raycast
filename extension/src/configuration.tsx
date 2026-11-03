@@ -2,6 +2,7 @@ import {
   Action,
   ActionPanel,
   Alert,
+  Clipboard,
   Form,
   Icon,
   Toast,
@@ -14,7 +15,7 @@ import { useEffect, useState } from "react";
 
 import { getVersion } from "./lib/rpc";
 import { restartDaemon, saveSettings } from "./lib/engine";
-import { loadSettingsOrDefaults } from "./lib/state";
+import { loadSettingsOrDefaults, readSecret } from "./lib/state";
 import { validateSettings } from "./lib/settings";
 import { Aria2Settings, ExtensionPreferences } from "./lib/types";
 
@@ -212,6 +213,23 @@ export default function Configuration() {
     }
   }
 
+  async function copySecret(): Promise<void> {
+    const secret = await readSecret();
+    if (!secret) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "RPC secret not found",
+      });
+      return;
+    }
+    await Clipboard.copy(secret);
+    await showToast({
+      style: Toast.Style.Success,
+      title: "RPC secret copied",
+      message: "Paste it into LinkSwift or another RPC client.",
+    });
+  }
+
   if (isLoading || !settings) {
     return <Form isLoading={true} />;
   }
@@ -232,6 +250,11 @@ export default function Configuration() {
             title="Restart Aria2"
             icon={Icon.ArrowClockwise}
             onAction={restart}
+          />
+          <Action
+            title="Copy RPC Secret"
+            icon={Icon.Key}
+            onAction={copySecret}
           />
           <Action
             title="Open Download Folder"
