@@ -20,3 +20,6 @@ extension/assets/engine/
 Thumbs.db
 .idea/
 .vscode/
+
+# Generated unit-test bundles
+extension/tests/.tmp/
