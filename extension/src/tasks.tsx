@@ -36,6 +36,7 @@ import {
   getTaskName,
   getTaskProgress,
   getTaskStatusLabel,
+  isMetadataTask,
   getPrimaryUri,
   isActiveTask,
   isStoppedTask,
@@ -165,7 +166,7 @@ function taskActions(
         <Action.Push
           title="Add Download"
           icon={Icon.Plus}
-          target={<AddDownload />}
+          target={<AddDownload fromTasks />}
         />
         <Action.Push
           title="Aria2 Configuration"
@@ -279,7 +280,7 @@ export default function Tasks() {
           <Action.Push
             title="Add Download"
             icon={Icon.Plus}
-            target={<AddDownload />}
+            target={<AddDownload fromTasks />}
           />
           <Action
             title="Refresh"
@@ -308,7 +309,7 @@ export default function Tasks() {
             <Action.Push
               title="Add Download"
               icon={Icon.Plus}
-              target={<AddDownload />}
+              target={<AddDownload fromTasks />}
             />
             <Action.Push
               title="Aria2 Configuration"
@@ -333,8 +334,9 @@ export default function Tasks() {
             const isWaiting = isWaitingTask(task);
             const isComplete = task.status === "complete";
             const isError = task.status === "error";
+            const isMetadata = isMetadataTask(task);
             const subtitle = isActive
-              ? `${getTaskKindLabel(kind)} · Downloading`
+              ? `${getTaskKindLabel(kind)} · ${isMetadata ? "Waiting for metadata" : "Downloading"}`
               : isComplete
                 ? `${getTaskKindLabel(kind)} · Completed`
                 : isError
@@ -343,21 +345,29 @@ export default function Tasks() {
 
             const accessories: List.Item.Accessory[] = [];
             if (isActive) {
-              accessories.push({ text: `${progress.toFixed(1)}%` });
-              if (parseBytes(task.downloadSpeed) > 0) {
-                accessories.push({
-                  tag: {
-                    value: formatSpeed(task.downloadSpeed),
-                    color: Color.Green,
-                  },
-                });
-                const eta = formatEta(
-                  task.totalLength,
-                  task.completedLength,
-                  task.downloadSpeed,
-                );
-                if (eta !== "unknown" && eta !== "done") {
-                  accessories.push({ text: `ETA ${eta}` });
+              if (isMetadata) {
+                accessories.push({ text: `${task.connections || "0"} peers` });
+              } else {
+                accessories.push({ text: `${progress.toFixed(1)}%` });
+                if (parseBytes(task.downloadSpeed) > 0) {
+                  accessories.push({
+                    tag: {
+                      value: formatSpeed(task.downloadSpeed),
+                      color: Color.Green,
+                    },
+                  });
+                  const eta = formatEta(
+                    task.totalLength,
+                    task.completedLength,
+                    task.downloadSpeed,
+                  );
+                  if (
+                    eta !== "unknown" &&
+                    eta !== "done" &&
+                    eta !== "waiting"
+                  ) {
+                    accessories.push({ text: `ETA ${eta}` });
+                  }
                 }
               }
             } else if (isWaiting) {

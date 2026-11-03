@@ -39,8 +39,11 @@ export function formatEta(
   completed: string | number | undefined,
   speed: string | number | undefined,
 ): string {
-  const remaining = parseBytes(total) - parseBytes(completed);
+  const totalBytes = parseBytes(total);
+  const completedBytes = parseBytes(completed);
+  const remaining = totalBytes - completedBytes;
   const bytesPerSecond = parseBytes(speed);
+  if (totalBytes <= 0) return "waiting";
   if (remaining <= 0) return "done";
   if (bytesPerSecond <= 0) return "unknown";
   const seconds = Math.ceil(remaining / bytesPerSecond);

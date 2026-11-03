@@ -39,6 +39,7 @@ import {
   getTaskProgress,
   getTaskStatusLabel,
   isActiveTask,
+  isMetadataTask,
   isStoppedTask,
   isWaitingTask,
 } from "./lib/task-type";
@@ -244,7 +245,10 @@ function taskActions(
 function metadataFor(task: Aria2Task) {
   const progress = getTaskProgress(task);
   const kind = getTaskKind(task);
-  const status = getTaskStatusLabel(task.status);
+  const metadata = isMetadataTask(task);
+  const status = metadata
+    ? "Waiting for metadata"
+    : getTaskStatusLabel(task.status);
   const error = getTaskError(task);
   const fileCount = getFileCount(task);
   const numPieces = Number.parseInt(task.numPieces ?? "0", 10);
@@ -254,7 +258,7 @@ function metadataFor(task: Aria2Task) {
       <Detail.Metadata.Label title="Status" text={status} />
       <Detail.Metadata.Label
         title="Progress"
-        text={`${progress.toFixed(1)}%`}
+        text={metadata ? "—" : `${progress.toFixed(1)}%`}
       />
       <Detail.Metadata.Label title="Type" text={getTaskKindLabel(kind)} />
       <Detail.Metadata.Label
@@ -271,11 +275,15 @@ function metadataFor(task: Aria2Task) {
       />
       <Detail.Metadata.Label
         title="ETA"
-        text={formatEta(
-          task.totalLength,
-          task.completedLength,
-          task.downloadSpeed,
-        )}
+        text={
+          metadata
+            ? "waiting"
+            : formatEta(
+                task.totalLength,
+                task.completedLength,
+                task.downloadSpeed,
+              )
+        }
       />
       <Detail.Metadata.Label
         title="Connections"
@@ -311,11 +319,13 @@ function TaskMetadataDetail({ task }: { task: Aria2Task }) {
       markdown={[
         `# ${getTaskName(task)}`,
         "",
-        `**${getTaskProgress(task).toFixed(1)}%** · ${formatSpeed(task.downloadSpeed)} · ETA ${formatEta(
-          task.totalLength,
-          task.completedLength,
-          task.downloadSpeed,
-        )}`,
+        isMetadataTask(task)
+          ? `Waiting for metadata · ${task.connections || "0"} peers`
+          : `**${getTaskProgress(task).toFixed(1)}%** · ${formatSpeed(task.downloadSpeed)} · ETA ${formatEta(
+              task.totalLength,
+              task.completedLength,
+              task.downloadSpeed,
+            )}`,
         "",
         getTaskError(task) ? `> ${getTaskError(task)}` : "",
       ]
@@ -513,11 +523,13 @@ export default function TaskDetail({ gid }: TaskDetailProps) {
   const markdown = [
     `# ${getTaskName(task)}`,
     "",
-    `**${progress.toFixed(1)}%** · ${getTaskKindLabel(kind)} · ${formatSpeed(task.downloadSpeed)} · ETA ${formatEta(
-      task.totalLength,
-      task.completedLength,
-      task.downloadSpeed,
-    )}`,
+    isMetadataTask(task)
+      ? `Waiting for metadata · ${task.connections || "0"} peers`
+      : `**${progress.toFixed(1)}%** · ${getTaskKindLabel(kind)} · ${formatSpeed(task.downloadSpeed)} · ETA ${formatEta(
+          task.totalLength,
+          task.completedLength,
+          task.downloadSpeed,
+        )}`,
     "",
     heatmapPath
       ? heatmapMarkdown(heatmapPath)

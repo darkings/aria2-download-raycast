@@ -3,8 +3,10 @@ import {
   ActionPanel,
   Clipboard,
   Form,
+  LaunchType,
   Toast,
   getPreferenceValues,
+  launchCommand,
   getSelectedFinderItems,
   showToast,
   useNavigation,
@@ -56,9 +58,19 @@ function buildHeaders(values: FormValues): string[] {
   return headers;
 }
 
-export default function AddDownload() {
+export default function AddDownload({
+  fromTasks = false,
+}: { fromTasks?: boolean } = {}) {
   const preferences = getPreferenceValues<ExtensionPreferences>();
   const { pop } = useNavigation();
+
+  async function afterAdd(): Promise<void> {
+    if (fromTasks) {
+      pop();
+      return;
+    }
+    await launchCommand({ name: "tasks", type: LaunchType.UserInitiated });
+  }
   const [settings, setSettings] = useState<Aria2Settings | null>(null);
   const [sourceType, setSourceType] = useState<SourceType>("link");
   const [urls, setUrls] = useState("");
@@ -209,7 +221,7 @@ export default function AddDownload() {
       toast.style = Toast.Style.Success;
       toast.title = "Torrent added";
       toast.message = torrentDisplayName(filePath);
-      if (values.navigate) pop();
+      if (values.navigate) await afterAdd();
     } catch (error) {
       toast.style = Toast.Style.Failure;
       toast.title = "Could not add torrent";
@@ -260,6 +272,16 @@ export default function AddDownload() {
     const headers = buildHeaders(values);
     if (headers.length > 0) options.header = headers;
 
+    function magnetHasNoTracker(value: string): boolean {
+      if (!isMagnetUri(value)) return false;
+      try {
+        const params = new URL(value).searchParams;
+        return !Array.from(params.getAll("tr")).some(Boolean);
+      } catch {
+        return false;
+      }
+    }
+
     function isTorrentUrl(value: string): boolean {
       try {
         const parsed = new URL(value);
@@ -297,8 +319,15 @@ export default function AddDownload() {
         lines.length === 1
           ? "Download added"
           : `${lines.length} downloads added`;
-      toast.message = lines.length === 1 ? lines[0].slice(0, 100) : "";
-      if (values.navigate) pop();
+      toast.message =
+        lines.length === 1
+          ? lines[0].slice(0, 100)
+          : `${lines.length} downloads added`;
+      if (lines.some(magnetHasNoTracker)) {
+        toast.message =
+          "Magnet has no tracker; DHT peers are required. Add extra trackers in Configuration if peers stay at 0.";
+      }
+      if (values.navigate) await afterAdd();
     } catch (error) {
       toast.style = Toast.Style.Failure;
       toast.title = "Could not add download";
@@ -336,7 +365,7 @@ export default function AddDownload() {
             id="urls"
             title="URLs"
             placeholder={"https://example.com/file.iso\nmagnet:?xt=urn:btih:…"}
-            info="One URL or magnet per line. Netdisk direct links should be pushed by LinkSwift instead."
+            info="One URL or magnet per line. A magnet without tr= trackers needs DHT peers. Netdisk direct links should be pushed by LinkSwift instead."
             value={urls}
             onChange={setUrls}
           />
@@ -459,7 +488,7 @@ export default function AddDownload() {
       />
       <Form.Checkbox
         id="navigate"
-        label="Return after adding"
+        label="Open Tasks after adding"
         value={navigate}
         onChange={setNavigate}
       />

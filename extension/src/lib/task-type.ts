@@ -1,4 +1,9 @@
-import { formatEta, formatPercent, getFileNameFromPath } from "./format";
+import {
+  formatEta,
+  formatPercent,
+  getFileNameFromPath,
+  parseBytes,
+} from "./format";
 import { isMagnetUri, isNetdiskUrl } from "./netdisk";
 import { Aria2Task, TaskKind } from "./types";
 
@@ -43,6 +48,14 @@ export function getTaskDirectory(task: Aria2Task): string {
 
 export function getTaskProgress(task: Aria2Task): number {
   return formatPercent(task.completedLength, task.totalLength);
+}
+
+export function isMetadataTask(task: Aria2Task): boolean {
+  return (
+    task.status === "active" &&
+    task.bittorrent !== undefined &&
+    parseBytes(task.totalLength) <= 0
+  );
 }
 
 export function getTaskEta(task: Aria2Task): string {

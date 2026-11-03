@@ -122,6 +122,7 @@ rpc-save-upload-metadata=true
 - 默认不做种；需要私有 tracker 保种时在 Configuration 里提高 `seed-time`。
 - BT 下载过程中仍会上传；只下载/分享有权限的内容。
 - 无公网入站端口/NAT 时 peer 较少、速度受限；首次启动 aria2 可能弹 Windows 防火墙，端口转发/放行需手动，engine 不自动提权。
+- 不含 `tr=` tracker 的 magnet 只能靠 DHT 找 peer；如果列表显示 `Waiting for metadata · 0 peers`，先确认内容有 seed，或把公开 tracker 填进 Configuration 的 Extra Trackers，或改用带 tracker 的 `.torrent` 文件。
 
 ### 完成通知
 
