@@ -28,7 +28,7 @@ import {
   isDaemonRunning,
 } from "./lib/rpc";
 import { startDaemon, stopDaemon } from "./lib/engine";
-import { formatBytes, formatEta, formatSpeed } from "./lib/format";
+import { formatBytes, formatEta, formatSpeed, parseBytes } from "./lib/format";
 import {
   getTaskError,
   getTaskKind,
@@ -340,45 +340,36 @@ export default function Tasks() {
             const isComplete = task.status === "complete";
             const isError = task.status === "error";
             const subtitle = isActive
-              ? `${getTaskKindLabel(kind)} · ${formatSpeed(task.downloadSpeed)} · ${progress.toFixed(1)}% · ETA ${formatEta(
-                  task.totalLength,
-                  task.completedLength,
-                  task.downloadSpeed,
-                )}`
+              ? `${getTaskKindLabel(kind)} · Downloading`
               : isComplete
-                ? `${getTaskKindLabel(kind)} · ${formatBytes(task.totalLength)} · completed`
+                ? `${getTaskKindLabel(kind)} · Completed`
                 : isError
-                  ? `${getTaskKindLabel(kind)} · ${getTaskError(task)}`
-                  : `${getTaskKindLabel(kind)} · ${getTaskStatusLabel(task.status)} · ${progress.toFixed(1)}%`;
+                  ? `${getTaskKindLabel(kind)} · Failed: ${getTaskError(task)}`
+                  : `${getTaskKindLabel(kind)} · ${getTaskStatusLabel(task.status)}`;
 
             const accessories: List.Item.Accessory[] = [];
             if (isActive) {
               accessories.push({ text: `${progress.toFixed(1)}%` });
-              accessories.push({
-                tag: {
-                  value: formatSpeed(task.downloadSpeed),
-                  color: Color.Green,
-                },
-              });
-              accessories.push({
-                text: `ETA ${formatEta(task.totalLength, task.completedLength, task.downloadSpeed)}`,
-              });
+              if (parseBytes(task.downloadSpeed) > 0) {
+                accessories.push({
+                  tag: {
+                    value: formatSpeed(task.downloadSpeed),
+                    color: Color.Green,
+                  },
+                });
+                const eta = formatEta(
+                  task.totalLength,
+                  task.completedLength,
+                  task.downloadSpeed,
+                );
+                if (eta !== "unknown" && eta !== "done") {
+                  accessories.push({ text: `ETA ${eta}` });
+                }
+              }
             } else if (isWaiting) {
               accessories.push({ text: `${progress.toFixed(1)}%` });
-              accessories.push({
-                tag: {
-                  value: getTaskStatusLabel(task.status),
-                  color: Color.Orange,
-                },
-              });
             } else if (isComplete) {
               accessories.push({ text: formatBytes(task.totalLength) });
-              accessories.push({
-                tag: { value: "Completed", color: Color.Green },
-              });
-            } else if (isError) {
-              accessories.push({ tag: { value: "Failed", color: Color.Red } });
-              accessories.push({ text: getTaskError(task) });
             }
 
             return (

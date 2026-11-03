@@ -6,7 +6,6 @@ import {
 } from "@raycast/api";
 
 import { EngineError, startDaemon, stopDaemon } from "./lib/engine";
-import { formatSpeed } from "./lib/format";
 import { getDaemonStatus, type DaemonStatus } from "./lib/rpc";
 
 function messageOf(error: unknown): string {
@@ -20,11 +19,11 @@ function subtitleFor(status: DaemonStatus): string {
   if (status.state === "error") {
     return "🔴 RPC error";
   }
-  const counts = `${status.active} active · ${status.waiting} waiting`;
-  if (status.state === "busy") {
-    return `🟡 Busy · ${counts} · ${formatSpeed(status.downloadSpeed)}`;
-  }
-  return `🟢 Running · ${counts}`;
+  const counts: string[] = [];
+  if (status.active > 0) counts.push(`${status.active} active`);
+  if (status.waiting > 0) counts.push(`${status.waiting} waiting`);
+  if (counts.length === 0) return "🟢 Running";
+  return `🟡 Busy · ${counts.join(" · ")}`;
 }
 
 async function updateSubtitle(status: DaemonStatus): Promise<void> {
